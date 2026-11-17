@@ -43,6 +43,7 @@ bool g_lmb = false, g_rmb = false, g_mmb = false;
 int g_dx = 0, g_dy = 0;
 int g_wheel = 0;
 bool g_cursor_shown = true;
+void* g_hwnd = nullptr;  // the game window, for posting WM_SETCURSOR from the game thread
 std::atomic<Device> g_device{Device::None};
 
 // Right stick units per mouse pixel at 100%. A flick across the screen is a full deflection.
@@ -84,20 +85,26 @@ bool KbmActive() {
     return g_lmb || g_rmb || g_mmb || g_dx || g_dy || g_wheel;
 }
 
-// Returns true if a vehicle action map is currently active in the game's ActionMap stack.
+// What the game's ActionMap stack says about the screen it is on.
+struct ActionMaps {
+    bool vehicle = false;  // a driving map is on top: steering, not walking
+    bool menu = false;     // a front end map is on top: Esc backs out of a menu there, it does not pause
+};
+
+// Reads the game's ActionMap stack.
 // The list head is stored at guest VA 0x471468.
 // Each ActionMap node: +0x20 prev, +0x24 next, +0x2A active flag (uint8_t), +0x30 name pointer (const char*).
-bool InVehicle() {
+ActionMaps ReadActionMaps() {
+    ActionMaps maps;
     uint8_t* base = mem::Base();
-    if (!base) return false;
+    if (!base) return maps;
 
     constexpr uint32_t kHeadVA = 0x471468;
-    if (!mem::IsCommitted(kHeadVA)) return false;
+    if (!mem::IsCommitted(kHeadVA)) return maps;
 
     uint32_t node_va = *reinterpret_cast<const uint32_t*>(base + kHeadVA);
     static char s_last_top[64] = {};
 
-    bool in_veh = false;
     char top_name[64] = {};
 
     for (int i = 0; i < 32 && node_va != 0; ++i) {
@@ -126,12 +133,16 @@ bool InVehicle() {
                 std::strstr(name, "BoatActionMap") ||
                 std::strstr(name, "HelicopterActionMap") ||
                 std::strstr(name, "AirplaneActionMap")) {
-                in_veh = true;
+                maps.vehicle = true;
                 break;
             }
             if (std::strstr(name, "CharacterActionMap")) {
-                in_veh = false;
+                maps.vehicle = false;
                 break;
+            }
+            // front end screens push their own maps: their back button is B, not Start
+            if (std::strstr(name, "Menu") || std::strstr(name, "FrontEnd") || std::strstr(name, "Options")) {
+                maps.menu = true;
             }
         }
         node_va = next_va;
@@ -139,15 +150,23 @@ bool InVehicle() {
 
     if (top_name[0] != '\0' && std::strncmp(s_last_top, top_name, sizeof(s_last_top)) != 0) {
         std::strncpy(s_last_top, top_name, sizeof(s_last_top) - 1);
-        LOGD("kbm: top action map '%s' (in_vehicle=%d)", s_last_top, in_veh);
+        LOGI("kbm: top action map '%s' (in_vehicle=%d menu=%d)", s_last_top, maps.vehicle, maps.menu);
     }
 
-    return in_veh;
+    return maps;
 }
 
 // The game hides the cursor while it plays. WM_SETCURSOR picks the class cursor back up when we want one, so this
 // only has to remember the state; SetCursor(nullptr) is what the window thread applies to hide it.
-void WantCursor(bool show) { g_cursor_shown = show; }
+void WantCursor(bool show) {
+    if (show == g_cursor_shown) return;
+    g_cursor_shown = show;
+    // WM_SETCURSOR only arrives on mouse activity: ask the window thread to apply the change now, so a pad only
+    // player does not keep a stale arrow on screen after the overlay closes
+    if (g_hwnd)
+        PostMessageW(static_cast<HWND>(g_hwnd), WM_SETCURSOR, reinterpret_cast<WPARAM>(g_hwnd),
+                     MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
+}
 
 void UpdateCursor() {
     // the game owns the cursor while focused; the options overlay takes it back
@@ -166,6 +185,7 @@ void ClearInput() {
 }  // namespace
 
 void Window(void* hwnd) {
+    g_hwnd = hwnd;
     RAWINPUTDEVICE rid{};
     rid.usUsagePage = 0x01;  // generic desktop
     rid.usUsage = 0x02;      // mouse
@@ -245,6 +265,8 @@ bool Message(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* resu
 
 void Pad(int port, input::Pad& pad) {
     if (port != 0) return;
+    // the overlay can open or close between two mouse messages: keep the cursor state in step every poll
+    UpdateCursor();
     // the options overlay has the keyboard and mouse while it is up: a held key must not reach the game, and a
     // mouse movement made in the overlay must not turn into a look when it closes
     if (app::OverlayOpen()) {
@@ -265,7 +287,8 @@ void Pad(int port, input::Pad& pad) {
 
     bool pad_active = PadActive(pad);
     bool kbm_active = KbmActive();
-    bool in_vehicle = InVehicle();
+    ActionMaps maps = ReadActionMaps();
+    bool in_vehicle = maps.vehicle;
 
     // movement and steering: WASD
     int16_t kx = 0, ky = 0;
@@ -361,11 +384,16 @@ void Pad(int port, input::Pad& pad) {
     // SAT phone: Tab
     if (Held(VK_TAB)) analog[kWhite] = 0xFF;
 
-    // Pause / Esc:
+    // Pause / Esc: Start in the world, B in a front end screen (the pad's back). Sending Start and B together would
+    // open the pause menu and back out of it in the same poll.
     if (Held(VK_ESCAPE)) {
-        buttons |= kStart;
-        analog[kB] = 0xFF;  // Esc cancels / backs out in menus
+        if (maps.menu) analog[kB] = 0xFF;
+        else buttons |= kStart;
     }
+    // TEMP pause test: Start only
+    if (Held(VK_F9)) buttons |= kStart;
+    // TEMP menu test: B alone, which closes the profile dialog and backs out of menus
+    if (Held(VK_F8)) analog[kB] = 0xFF;
 
     // Menus: Enter is Select (A)
     if (Held(VK_RETURN)) analog[kA] = 0xFF;

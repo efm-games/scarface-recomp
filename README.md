@@ -70,7 +70,9 @@ Mouse sensitivity and Y inversion are in the options.
 - Launcher with a disc image picker, an extracted-folder picker, display/input options and the intro-skip toggle.
 - In-game options overlay (**F1**) covering display, controls, advanced rendering and game settings.
 - Save manager that keeps the game's Xbox-format saves in `hdd\E\UDATA\5655003F` beside the executable and can import an Xbox save folder.
+- Screenshots with **F2**, saved as BMP files in `screenshots` beside the executable.
 - Optional intro skip (off by default), crash dumps and log files.
+- Frame and state captures with **F2**/**F3** and the debug variables in [docs/debugging.md](docs/debugging.md).
 
 ## Known issues
 

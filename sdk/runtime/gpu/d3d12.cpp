@@ -17,6 +17,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <filesystem>
@@ -34,6 +35,7 @@
 #include "core/log.h"
 #include "gpu/backend.h"
 #include "gpu/ext.h"
+#include "gpu/history.h"
 #include "gpu/shaders.h"
 #include "gpu/texture.h"
 #include "gpu/texturedumper.h"
@@ -612,6 +614,7 @@ private:
     void LoadSettings();
     // Present, in call order, each callee right after its caller; DrawFrame runs the two after it
     void FinishCapture(const Surface& front);
+    void SaveScreenshot(const Surface& front);
     void StartCapture();
     void ResizeSwap();
     void UploadGammaRamp();
@@ -626,6 +629,7 @@ private:
                                   uint32_t h, const ShrinkOptions& o = {});
     bool ReadBack(ID3D12Resource* res, uint32_t w, uint32_t h, std::vector<uint8_t>& out);
     void CapStep(const Surface& rt);
+    void CapEvery();
     // a resource CapSave shrinks to w x h and writes, in state *state, colour times mul
     struct CapImage {
         ID3D12Resource* res;
@@ -637,6 +641,8 @@ private:
     };
     void CapSave(const CapImage& img, const char* name);
     void CapSave(Target& t, const char* name);
+    // the image written to path as a top down 32 bit BMP
+    void SaveImage(const CapImage& img, const std::filesystem::path& path);
     // a surface's place in targets_: its key, console size and entry, end when it has none
     struct TargetSlot {
         uint32_t data;
@@ -744,6 +750,10 @@ private:
     std::filesystem::path cap_dir_;
     uint32_t cap_i_ = 0;
     uint32_t cap_rt_ = 0;
+    uint32_t cap_frames_left_ = 0;  // XBE_CAPTURE_FRAMES: capture this many frames in a row, one folder each
+    bool cap_tex_ok_ = true;        // XBE_CAPTURE_TEX=0: skip the texture BMPs, the long part of a capture
+    bool cap_sh_ok_ = true;         // XBE_CAPTURE_HLSL=0: skip the translated shader sources
+    bool cap_every_ = false;        // XBE_CAPTURE_EVERY=1: a snapshot and every vertex of every record
     std::unordered_set<uint32_t> cap_seen_;
     std::unordered_set<uint64_t> cap_sh_;
     struct CapTex {
@@ -2484,7 +2494,7 @@ void D3D12Backend::CaptureTextures(const State& s, const DrawTextures& stages) {
         bool tg = targets_.count(SizedTargetKey(d.data, Format(d.format).depth, d.width, d.height));
         fprintf(cap_, " | t%d %08X fmt %X %ux%u%s%s", i, d.data, d.format, d.width, d.height, tg ? " target" : "",
                 res ? "" : " unbound");
-        if (res && !tg && stages.info[i].kind == kTex2D && cap_seen_.insert(d.data).second) {
+        if (res && cap_tex_ok_ && !tg && stages.info[i].kind == kTex2D && cap_seen_.insert(d.data).second) {
             cap_tex_.push_back({res, stages.sv[i].Format, d.data, d.width, d.height});
         }
     }
@@ -2498,7 +2508,9 @@ void D3D12Backend::CaptureInputs(const State& s, const Assembled& a, const DrawC
     fprintf(cap_, "\n     verts regs %04X dec %016llX", a.regs, (unsigned long long)a.decode);
     uint32_t n = 0;
     for (int r = 0; r < 16; r++) n += (a.regs >> r) & 1;
-    for (size_t v = 0; v < std::min<size_t>(4, n ? a.vertices.size() / (n * 4) : 0); v++) {
+    size_t shown = n ? a.vertices.size() / (n * 4) : 0;
+    if (!cap_every_) shown = std::min<size_t>(4, shown);
+    for (size_t v = 0; v < shown; v++) {
         fprintf(cap_, " [");
         for (uint32_t k = 0; k < n * 4; k++) fprintf(cap_, " %g", a.vertices[v * n * 4 + k]);
         fprintf(cap_, " ]");
@@ -2559,7 +2571,7 @@ void D3D12Backend::EndDrawCapture(const State& s, const Assembled& a, uint32_t c
 
 // each shader once, as translated
 void D3D12Backend::CaptureShader(const char* kind, uint64_t key, const std::string& src) {
-    if (!cap_sh_.insert(key).second) return;
+    if (!cap_sh_ok_ || !cap_sh_.insert(key).second) return;
     char name[48];
     snprintf(name, sizeof(name), "%s_%016llX.hlsl", kind, (unsigned long long)key);
     if (FILE* f = _wfopen((cap_dir_ / name).c_str(), L"w")) {
@@ -3203,28 +3215,58 @@ void D3D12Backend::ResizeSwap() {
 void D3D12Backend::FinishCapture(const Surface& front) {
     CapStep(Surface{});
     if (Target* f = FindTarget(front, false)) CapSave(*f, "final");
-    for (auto& t : cap_tex_) {
-        char name[32];
-        snprintf(name, sizeof(name), "tex_%08X", t.data);
-        D3D12_RESOURCE_STATES st = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-        CapSave({.res = t.res.Get(), .state = &st, .fmt = t.fmt, .w = t.w, .h = t.h}, name);
+    if (cap_tex_ok_) {
+        for (auto& t : cap_tex_) {
+            char name[32];
+            snprintf(name, sizeof(name), "tex_%08X", t.data);
+            D3D12_RESOURCE_STATES st = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+            CapSave({.res = t.res.Get(), .state = &st, .fmt = t.fmt, .w = t.w, .h = t.h}, name);
+        }
     }
     fclose(cap_);
     cap_ = nullptr;
+    gpu::DumpWrites((cap_dir_ / L"history.txt").wstring());
     cap_tex_.clear();
     LOGI("d3d12: frame captured to %s", cap_dir_.string().c_str());
+}
+
+// F2: the frame on screen now, one BMP beside the executable
+void D3D12Backend::SaveScreenshot(const Surface& front) {
+    Target* f = FindTarget(front, false);
+    if (!f) {
+        LOGW("screenshot: the front buffer is not a target, nothing saved");
+        return;
+    }
+    SYSTEMTIME tm;
+    GetLocalTime(&tm);
+    wchar_t name[64];
+    swprintf(name, 64, L"%04u%02u%02u_%02u%02u%02u_%03u.bmp", tm.wYear, tm.wMonth, tm.wDay, tm.wHour, tm.wMinute,
+             tm.wSecond, tm.wMilliseconds);
+    std::error_code ec;
+    std::filesystem::path dir = app::ExeDir() / "screenshots";
+    std::filesystem::create_directories(dir, ec);
+    std::filesystem::path path = dir / name;
+    SaveImage({.res = f->res.Get(), .state = &f->state, .fmt = f->fmt, .w = f->gw, .h = f->gh, .mul = f->range}, path);
+    // the state writes behind the shot, beside it: why this frame saw what it saw
+    gpu::DumpWrites((dir / (path.stem().wstring() + L"_history.txt")).wstring());
+    LOGI("screenshot: %s", path.string().c_str());
 }
 
 void D3D12Backend::StartCapture() {
     SYSTEMTIME tm;
     GetLocalTime(&tm);
     char stamp[32];
-    snprintf(stamp, sizeof(stamp), "%02u%02u%02u", tm.wHour, tm.wMinute, tm.wSecond);
+    // the milliseconds keep back to back captures of one burst in separate folders
+    snprintf(stamp, sizeof(stamp), "%02u%02u%02u_%03u", tm.wHour, tm.wMinute, tm.wSecond, tm.wMilliseconds);
     std::error_code ec;
     cap_dir_ = std::filesystem::weakly_canonical(app::ExeDir() / diag::CaptureDir() / stamp, ec);
     std::filesystem::create_directories(cap_dir_, ec);
     cap_ = _wfopen((cap_dir_ / "frame.txt").c_str(), L"w");
     cap_i_ = cap_rt_ = 0;
+    cap_tex_ok_ = !std::getenv("XBE_CAPTURE_TEX") || atoi(std::getenv("XBE_CAPTURE_TEX")) != 0;
+    cap_sh_ok_ = !std::getenv("XBE_CAPTURE_HLSL") || atoi(std::getenv("XBE_CAPTURE_HLSL")) != 0;
+    cap_every_ = std::getenv("XBE_CAPTURE_EVERY") && atoi(std::getenv("XBE_CAPTURE_EVERY")) != 0;
+    gpu::ClearWrites();  // history.txt then covers exactly the captured frame
     cap_seen_.clear();
     cap_sh_.clear();
 }
@@ -3379,9 +3421,13 @@ void LogPerf() {
 
 void D3D12Backend::Present(const Surface& front) {
     PerfScope perf_present{g_perf.present};
+    if (g_screenshot.exchange(false)) SaveScreenshot(front);
     if (cap_) {
         FinishCapture(front);
+        if (--cap_frames_left_ > 0) StartCapture();
     } else if (g_capture.exchange(false) && CaptureOn()) {
+        cap_frames_left_ = 1;
+        if (const char* n = std::getenv("XBE_CAPTURE_FRAMES")) cap_frames_left_ = std::max(1, atoi(n));
         StartCapture();
     }
     ResizeSwap();
@@ -3662,11 +3708,11 @@ constexpr int kBmpBitCount = 28;
 constexpr int kBmpImageSize = 34;
 constexpr uint32_t kBmpInfoBytes = 40;
 
-void D3D12Backend::CapSave(const CapImage& img, const char* name) {
+void D3D12Backend::SaveImage(const CapImage& img, const std::filesystem::path& path) {
     ComPtr<ID3D12Resource> down = Shrink(img.res, *img.state, img.fmt, img.w, img.h, {.mul = img.mul});
     std::vector<uint8_t> px;
     if (!down || !ReadBack(down.Get(), img.w, img.h, px)) return;
-    FILE* f = _wfopen((cap_dir_ / (std::string(name) + ".bmp")).c_str(), L"wb");
+    FILE* f = _wfopen(path.c_str(), L"wb");
     if (!f) return;
     uint8_t hd[kBmpHeaderBytes] = {'B', 'M'};  // BITMAPFILEHEADER and BITMAPINFOHEADER, top down 32 bit
     auto put = [&](int o, uint32_t v) { std::memcpy(hd + o, &v, 4); };
@@ -3683,6 +3729,10 @@ void D3D12Backend::CapSave(const CapImage& img, const char* name) {
     fclose(f);
 }
 
+void D3D12Backend::CapSave(const CapImage& img, const char* name) {
+    SaveImage(img, cap_dir_ / (std::string(name) + ".bmp"));
+}
+
 void D3D12Backend::CapSave(Target& t, const char* name) {
     DXGI_FORMAT fmt = t.depth ? kDepthRead : t.fmt;
     float mul = t.depth ? 1 : t.range;
@@ -3692,6 +3742,7 @@ void D3D12Backend::CapSave(Target& t, const char* name) {
 // the frame moves to another target: save the one it leaves
 void D3D12Backend::CapStep(const Surface& rt) {
     uint32_t d = rt.header ? mem::VirtualFromPhysical(rt.data) : 0;
+    if (cap_every_) CapEvery();
     if (d == cap_rt_) return;
     auto it = targets_.find(TargetMapKey(cap_rt_, false));
     if (cap_rt_ && it != targets_.end()) {
@@ -3706,6 +3757,16 @@ void D3D12Backend::CapStep(const Surface& rt) {
         CapSave(z->second, name);
     }
     cap_rt_ = d;
+}
+
+// XBE_CAPTURE_EVERY=1: the result of every record, shrunk to 180x120, named after the record that made it
+void D3D12Backend::CapEvery() {
+    auto it = targets_.find(TargetMapKey(cap_rt_, false));
+    if (it == targets_.end()) return;
+    Target& t = it->second;
+    char name[40];
+    snprintf(name, sizeof(name), "%04u_now_%08X", cap_i_, cap_rt_);
+    CapSave({.res = t.res.Get(), .state = &t.state, .fmt = t.fmt, .w = 180, .h = 120, .mul = t.range}, name);
 }
 
 void D3D12Backend::Capture(Target& t, const char* tag, float mul) {

@@ -59,6 +59,14 @@ Context is automatically detected via `WheeledVehicleActionMap`, `BoatActionMap`
 | Esc | Back out / cancel / pause | B / Start |
 | Mouse wheel | Change page / cycle | D-pad left / right |
 
+## Any time
+
+| Key | Action |
+| --- | --- |
+| F1 | Open or close the options overlay |
+| F2 | Save the current frame as a BMP in the `screenshots` folder beside the executable |
+| F3 | Capture the next frame in full under the `capture` folder, for debugging (see [debugging.md](debugging.md)) |
+
 ## Implementation Notes
 
 - **Context-sensitive detection (`InVehicle()`):** The guest ActionMap stack is tracked at guest

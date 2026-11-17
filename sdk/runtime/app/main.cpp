@@ -154,6 +154,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
         case WM_KEYDOWN:
             if (wp == VK_F3) DumpThreads();
+            // F2 saves the frame as a BMP in screenshots; its auto-repeat does not write one per repeat
+            if (wp == VK_F2 && !(lp & (intptr_t(1) << 30))) gpu::g_screenshot = true;
             // F1 toggles the options overlay; its auto-repeat does not toggle it back and forth
             if (wp == VK_F1 && !(lp & (intptr_t(1) << 30))) ToggleOverlay();
             return 0;

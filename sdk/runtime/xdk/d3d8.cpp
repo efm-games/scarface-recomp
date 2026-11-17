@@ -19,6 +19,7 @@
 #include "app/app.h"
 #include "core/diag.h"
 #include "gpu/backend.h"
+#include "gpu/history.h"
 #include "gpu/shaders.h"
 #include "gpu/simple_dirty.h"
 #include "gpu/texture.h"
@@ -144,6 +145,17 @@ void SetSimple(uint32_t method, uint32_t v) {
     gpu::MarkSimple(method >> 2);
 }
 
+// the title's return address, for the state history
+uint32_t ReturnPc(X86Context& ctx) { return R32(ctx.esp); }
+
+// a draw in the state history: stage 0's colour op and arguments, and the texture factor
+void RecordDraw(uint32_t prim) {
+    const auto& t = g_state.tss[0];
+    uint32_t packed = (t[gpu::kTssColorOp] & 0xFF) | (t[gpu::kTssColorArg0] & 0xFF) << 8 |
+                      (t[gpu::kTssColorArg1] & 0xFF) << 16 | (t[gpu::kTssColorArg2] & 0xFF) << 24;
+    gpu::RecordWrite(gpu::kWriteDraw, prim, packed, g_state.rs[gpu::kRsTextureFactor], 0);
+}
+
 std::unordered_map<uint32_t, std::shared_ptr<gpu::VertexShader>> g_vs;
 std::unordered_map<uint32_t, std::shared_ptr<gpu::PixelShader>> g_ps;
 std::array<uint32_t, 3> g_buffers{};  // front, back surfaces
@@ -234,7 +246,12 @@ void SyncDeferred() {
     // deferred states live in the title's memory, the inline SetRenderState and SetTextureStageState write them
     for (uint32_t i = gpu::kRsDeferredFirst; i < gpu::kRsComplexFirst; i++) g_state.rs[i] = R32(kRenderState + i * 4);
     for (int s = 0; s < 4; s++)
-        for (uint32_t i = 0; i < gpu::kTssBumpEnvMat00; i++) g_state.tss[s][i] = R32(kTextureState + (s * kStageStates + i) * 4);
+        for (uint32_t i = 0; i < gpu::kTssBumpEnvMat00; i++) {
+            uint32_t v = R32(kTextureState + (s * kStageStates + i) * 4);
+            // the title writes its deferred table itself for state save and restore: that write is not a call
+            if (v != g_state.tss[s][i]) gpu::RecordWrite(gpu::kWriteMirror, s * 32 + i, g_state.tss[s][i], v, 0);
+            g_state.tss[s][i] = v;
+        }
 }
 
 float ZScale(const gpu::Surface& zs) {
@@ -266,6 +283,8 @@ void UpdateViewportConstants() {
 }
 
 void SetComplex(uint32_t rs, uint32_t v) {
+    if (rs == gpu::kRsTextureFactor && g_state.rs[rs] != v)
+        gpu::RecordWrite(gpu::kWriteTextureFactor, 0, g_state.rs[rs], v, 0);
     g_state.rs[rs] = v;
     W32(kRenderState + rs * 4, v);
 }
@@ -792,6 +811,8 @@ HLE_STDCALL(D3DDevice_SetTextureState_ColorKeyColor, 2) {
 HLE_STDCALL(D3DDevice_SetTextureStageStateNotInline, 3) {
     uint32_t stage = a[0] & 3, type = a[1], v = a[2];
     if (type < gpu::kTssCount) {
+        if (g_state.tss[stage][type] != v)
+            gpu::RecordWrite(gpu::kWriteTextureStage, stage * 32 + type, g_state.tss[stage][type], v, ReturnPc(ctx));
         g_state.tss[stage][type] = v;
         W32(kTextureState + (stage * kStageStates + type) * 4, v);
     }
@@ -841,6 +862,8 @@ HLE_STDCALL(D3DDevice_SetTexture, 2) {
     if (!same) AddRef(ctx, tex);
     SetDev(kDevTextures + stage * 4, tex);
     if (!same) Release(ctx, old);
+    if (g_state.textures[stage] != tex)
+        gpu::RecordWrite(gpu::kWriteTexture, stage, g_state.textures[stage], tex, ReturnPc(ctx));
     g_state.textures[stage] = tex;
     W32(kDirtyFlags, R32(kDirtyFlags) | XDK_DirtyFlags_Texture);
     return 0;
@@ -1156,8 +1179,12 @@ HLE_STDCALL(D3DDevice_DeletePixelShader, 1) {
 
 HLE_STDCALL(D3DDevice_SetPixelShader, 1) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
+    uint32_t prev = g_state.ps ? g_state.ps->handle : 0;
     g_state.ps = nullptr;
-    if (!a[0]) return 0;
+    if (!a[0]) {
+        if (prev) gpu::RecordWrite(gpu::kWritePixelShader, 0, prev, 0, ReturnPc(ctx));
+        return 0;
+    }
     auto it = g_ps.find(a[0]);
     if (it != g_ps.end()) {
         g_state.ps = it->second;
@@ -1178,6 +1205,8 @@ HLE_STDCALL(D3DDevice_SetPixelShader, 1) {
     }
     // the definition loads the combiner state like the XDK pushes it
     const uint32_t* d = g_state.ps->def;
+    if (g_state.ps->handle != prev)
+        gpu::RecordWrite(gpu::kWritePixelShader, 0, prev, g_state.ps->handle, ReturnPc(ctx));
     for (int i = 0; i < 8; i++) {
         SetSimple(gpu::kMPsAlphaInputs + i * 4, d[0 + i]);
         SetSimple(gpu::kMPsConstant0 + i * 4, d[10 + i]);
@@ -1213,6 +1242,7 @@ HLE_STDCALL(D3DDevice_DrawVertices, 3) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     Walk(Dev(kDevPush));  // a visibility test begun since the last draw counts this one
     SyncDeferred();
+    RecordDraw(a[0]);
     if (g_backend) g_backend->Draw(g_state, a[0], a[1], a[2], nullptr);
     return 0;
 }
@@ -1221,6 +1251,7 @@ HLE_STDCALL(D3DDevice_DrawIndexedVertices, 3) {
     std::lock_guard<std::recursive_mutex> lock(g_lock);
     Walk(Dev(kDevPush));
     SyncDeferred();
+    RecordDraw(a[0]);
     const uint8_t* indices = a[2] ? static_cast<const uint8_t*>(HostPtr(a[2])) : nullptr;
     if (g_backend) g_backend->Draw(g_state, a[0], 0, a[1], indices);
     return 0;
@@ -1257,6 +1288,7 @@ uint32_t UpVertices(const void* src, uint32_t bytes) {
 void DrawUp(uint32_t prim, uint32_t count, const void* vertices, uint32_t stride, const uint16_t* indices = nullptr) {
     if (!g_backend || !count || !stride) return;
     SyncDeferred();
+    RecordDraw(prim);
     // indexed: count is of indices, the ring takes the vertices up to the highest one
     uint32_t used = indices ? *std::max_element(indices, indices + count) + 1u : count;
     auto stream = g_state.streams[0];
