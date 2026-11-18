@@ -89,11 +89,12 @@ bool KbmActive() {
 struct ActionMaps {
     bool vehicle = false;  // a driving map is on top: steering, not walking
     bool menu = false;     // a front end map is on top: Esc backs out of a menu there, it does not pause
+    bool dialog = false;   // a system dialog is on top: Enter dismisses it, like the pad's B
 };
 
 // Reads the game's ActionMap stack.
 // The list head is stored at guest VA 0x471468.
-// Each ActionMap node: +0x20 prev, +0x24 next, +0x2A active flag (uint8_t), +0x30 name pointer (const char*).
+// Each ActionMap node: +0x04 name pointer (const char*), +0x20 prev, +0x24 next, +0x2A active flag (uint8_t).
 ActionMaps ReadActionMaps() {
     ActionMaps maps;
     uint8_t* base = mem::Base();
@@ -112,7 +113,7 @@ ActionMaps ReadActionMaps() {
 
         uint8_t active = *(base + node_va + 0x2A);
         uint32_t next_va = *reinterpret_cast<const uint32_t*>(base + node_va + 0x24);
-        uint32_t name_va = *reinterpret_cast<const uint32_t*>(base + node_va + 0x30);
+        uint32_t name_va = *reinterpret_cast<const uint32_t*>(base + node_va + 0x04);
 
         if (active && name_va != 0 && mem::IsCommitted(name_va)) {
             char name[64] = {};
@@ -140,24 +141,32 @@ ActionMaps ReadActionMaps() {
                 maps.vehicle = false;
                 break;
             }
-            // front end screens push their own maps: their back button is B, not Start
-            if (std::strstr(name, "Menu") || std::strstr(name, "FrontEnd") || std::strstr(name, "Options")) {
+            // front end screens push their own maps: their back button is B, not Start. The game names these
+            // PauseActionMap / SystemDialogActionMap (and reuses them for pages like Options), not just "Menu".
+            if (std::strstr(name, "Menu") || std::strstr(name, "FrontEnd") || std::strstr(name, "Options") ||
+                std::strstr(name, "Pause") || std::strstr(name, "Dialog")) {
                 maps.menu = true;
             }
         }
         node_va = next_va;
     }
 
+    // Only the topmost map decides how Enter behaves. SystemDialogActionMap is pushed for notices such as
+    // "Load profile successful"; the game dismisses those with the pad's B (V on the PC bindings), not its A,
+    // so Enter has to send B there. Checking the top avoids leaking B into play if a dialog lingers in the stack.
+    if (std::strstr(top_name, "Dialog")) maps.dialog = true;
+
     if (top_name[0] != '\0' && std::strncmp(s_last_top, top_name, sizeof(s_last_top)) != 0) {
         std::strncpy(s_last_top, top_name, sizeof(s_last_top) - 1);
-        LOGI("kbm: top action map '%s' (in_vehicle=%d menu=%d)", s_last_top, maps.vehicle, maps.menu);
+        LOGI("kbm: top action map '%s' (in_vehicle=%d menu=%d dialog=%d)", s_last_top, maps.vehicle, maps.menu,
+             maps.dialog);
     }
 
     return maps;
 }
 
-// The game hides the cursor while it plays. WM_SETCURSOR picks the class cursor back up when we want one, so this
-// only has to remember the state; SetCursor(nullptr) is what the window thread applies to hide it.
+// The game hides the cursor while it plays. WM_SETCURSOR applies the wanted state on the window thread, so this
+// only remembers it and posts that message when it changes.
 void WantCursor(bool show) {
     if (show == g_cursor_shown) return;
     g_cursor_shown = show;
@@ -252,12 +261,11 @@ bool Message(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* resu
             return false;
         case WM_SETCURSOR:
             UpdateCursor();
-            if (!g_cursor_shown) {
-                ::SetCursor(nullptr);
-                if (result) *result = TRUE;
-                return true;
-            }
-            return false;
+            // ImGui is told not to change the OS cursor, so this is now the only place that sets it: hidden
+            // during play, plain arrow for the options overlay and whenever the window is not active
+            ::SetCursor(g_cursor_shown ? ::LoadCursor(nullptr, IDC_ARROW) : nullptr);
+            if (result) *result = TRUE;
+            return true;
         default:
             return false;
     }
@@ -390,8 +398,13 @@ void Pad(int port, input::Pad& pad) {
         if (maps.menu) analog[kB] = 0xFF;
         else buttons |= kStart;
     }
-    // Menus: Enter is Select (A)
-    if (Held(VK_RETURN)) analog[kA] = 0xFF;
+    // Enter: Select (A) in menus and wall cover on foot. In a vehicle A is the accelerator and the PC manual
+    // gives Enter no driving meaning, so it must not fall through there. System dialogs use B (pad back/dismiss),
+    // which is what the PC scheme shows as V on the "Load profile successful" screen.
+    if (Held(VK_RETURN)) {
+        if (maps.dialog) analog[kB] = 0xFF;
+        else if (maps.menu || !in_vehicle) analog[kA] = 0xFF;
+    }
 
     // Menus: Arrow keys stand in for Xbox d-pad
     if (Held(VK_UP)) buttons |= kDpadUp;
@@ -421,5 +434,14 @@ void Pad(int port, input::Pad& pad) {
 }
 
 Device LastDevice() { return g_device.load(std::memory_order_relaxed); }
+
+void Rumble(int, uint16_t& left, uint16_t& right) {
+    // A keyboard/mouse player has no pad in their hands: drop the motors so a connected controller does not
+    // buzz on the desk. Because the last device to send input decides, picking the pad up restores rumble
+    // as soon as a button or stick is used. Zero stops any motors still spinning from an earlier request.
+    if (g_device.load(std::memory_order_relaxed) == Device::KeyboardMouse) {
+        left = right = 0;
+    }
+}
 
 }  // namespace kbm

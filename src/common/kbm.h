@@ -23,5 +23,6 @@ Device LastDevice();
 void Window(void* hwnd);  // kGame.window: raw mouse input is registered on the game window
 bool Message(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* result);
 void Pad(int port, input::Pad& pad);
+void Rumble(int port, uint16_t& left, uint16_t& right);  // kGame.rumble: silence a pad the player is not using
 
 }  // namespace kbm

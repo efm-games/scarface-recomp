@@ -2,49 +2,34 @@
 
 Ordered by priority. Only the top item is being worked on.
 
-## 1. Intro skip (done)
-
-Skipping the logos now advances the playlist straight to its completion phase, so the boot state
-machine resumes in under a second instead of waiting for all five movies.
-
-- The startup state machine (`sub_002317D0`) sets up a five-movie publisher playlist through
-  `sub_00028940` and is only resumed after the playlist finishes.
-- `src\game\hooks.cpp` forces the manager to phase 5 on its first update; the original phase 5 block
-  performs the `[0x4879E8]+0x48` handshake and resets the manager.
-- User default remains `skip_intro = false`; the development `settings.toml` keeps it enabled.
-
-## 2. Control schemes and plug-and-play gamepad (done)
-
-Make the game fully playable from the keyboard alone and from any connected pad without touching
-the HUD.
-
-- Official PC manual scheme implemented in `src\common\kbm.cpp` and `src\common\game_info.cpp`.
-- Dynamic on-foot vs vehicle detection (`InVehicle()`) reading the guest ActionMap stack at `0x471468`
-  (`WheeledVehicleActionMap`, `BoatActionMap`, `HelicopterActionMap`, `AirplaneActionMap`).
-- In vehicle: W/P gas (Xbox A), S/;/R brake/reverse (Xbox X), A/D steer, Space handbrake (Xbox B).
-- On foot: Space/LMB fire (RT), Shift sprint (A), Ctrl crouch (L3), Enter wall cover, Caps/RMB lock-on (LT),
-  F/MMB alt fire (Black), 1/2 weapon select, 3 holster, C/Home recenter (R3), T/X provoke (B).
-- Menus: WASD/arrows navigation, Enter select (A), Esc cancel/back (B/Start).
-- Connected pad seamlessly augments keyboard/mouse; input switches on the fly.
-- Verified build and relinked `Scarface.dll`.
-
-## 3. Pause menu white background (active)
-
-The pause menu sometimes renders a white backdrop instead of the red one, making the text hard to
-read. Fix after controls.
-
-## 4. HUD key prompts
+## 1. HUD key prompts
 
 Show PC key equivalents (e.g. `[W] Accelerate`) when keyboard/mouse is the active device instead of
 gamepad glyphs. The Xbox build only ships gamepad artwork, so this needs glyph substitution or a
-separate HUD overlay. Start only after items 1-3 are done.
+separate HUD overlay. `kbm::LastDevice()` already reports the active device, so the input side is ready.
+
+## 2. Optional modern gamepad controls
+
+Offer an optional "modern controls" preset for gamepads that follows a GTA-style layout instead of the
+original Xbox bindings: RT accelerate, LT brake/reverse, left stick steer, and the usual twin-stick
+camera and aiming conventions. Implement as a settings option, off by default, that remaps the pad
+before the game reads it. The original scheme stays available and keyboard/mouse is unaffected.
+
+## 3. Antialiasing
+
+Add a user-selectable antialiasing option to the Direct3D 12 renderer (a post-process pass such as FXAA
+or SMAA, or MSAA where supported), exposed in the launcher, the F1 overlay and `settings.toml`. Keep it
+off or balanced by default and measure the cost on the integrated GPU.
+
+## 4. DLSS 5
+
+Investigate NVIDIA DLSS 5 upscaling for the Direct3D 12 renderer as an optional quality/performance
+setting on supported GPUs, with a clean fallback to the current render path when it is unavailable.
+Fully optional: the base renderer must keep working without an NVIDIA card or extra redistributables.
 
 ## Later / release prep
 
 - Test the save importer with real Xbox-format saves (`hdd\E\UDATA\5655003F`,
   `hdd\E\TDATA\5655003F`).
-- Public preview repo: install Git, initialize, update `README.md`, extend `.gitignore`
-  (`/cap/`, `/dev/`, `/tools/`, `*.log`, `*.bmp`, `/XboxXBERecomp-main/`, `*.iso`), move stray root
-  scripts/logs into `dev\legacy\`.
 - Automated menu-input test recipe.
 - Texture popping during play is reported but explicitly not a priority.

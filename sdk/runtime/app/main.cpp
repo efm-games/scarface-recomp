@@ -319,6 +319,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
+    // the game's input layer owns the OS cursor: without this ImGui puts the arrow back on every mouse move,
+    // including during play when the game window should have no pointer at all
+    io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
     // the options overlay (F1) draws in this context, so it gets the launcher's theme and font
     float unit = float(GetDpiForWindow(app::g_hwnd)) / 96.0f;
     app::ui::Style(unit);

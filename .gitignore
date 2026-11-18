@@ -51,6 +51,8 @@ dev/save-backup-*/
 *.user
 *.suo
 
-# Local temporary folder
+# Local development tools, captures and the upstream SDK copy are not shipped
+/dev/
+/XboxXBERecomp-main/
 .local
 __pycache__/

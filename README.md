@@ -9,11 +9,19 @@ The game's x86 code is statically recompiled ahead of time and the Xbox kernel/X
 
 ## Playable preview
 
-This is a public preview (`v0.1.1`). The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a keyboard and mouse or a gamepad. Expect rough edges; see [Known issues](#known-issues).
+This is a public preview (`v0.2.0`). The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a keyboard and mouse or a gamepad. Expect rough edges; see [Known issues](#known-issues).
+
+### What's new in v0.2.0
+
+- Fixed the remaining opaque UI panels: translucent ammo and pause panes now use the diffuse alpha.
+- Keyboard bindings follow the official PC manual. Enter no longer accelerates in a vehicle, and it dismisses system dialogs such as "Load profile successful".
+- Gamepad rumble is muted while keyboard and mouse are the active input; using the pad restores it.
+- The Windows mouse pointer is now hidden during play and shown again in the F1 options overlay.
+- Repository cleanup: development scripts and the local upstream SDK copy are no longer tracked.
 
 ## Installation
 
-1. Download `Scarface-v0.1.1-preview.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
+1. Download `Scarface-v0.2.0.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
 2. Run `Scarface.exe`.
 3. Click **Browse for the disc image...** and pick your Xbox `.iso`/`.xiso` (a whole-disc dump also works), or **Use an extracted folder...** and pick the folder that holds `default.xbe`. The launcher remembers the path.
 4. Click **Play**. The first start compiles the game's code for your PC once with the bundled recompiler and Clang; it takes a few minutes and about 1 GB of free disk space. Every later start goes straight into the game.

@@ -62,6 +62,6 @@ const app::GameInfo app::kGame = {
     .message = kbm::Message,                  // window messages first; true takes one
     .ui = app::Overlay,                       // F1: the in-game options overlay
     .pad = kbm::Pad,                          // changes a polled pad
-    .rumble = nullptr,                        // changes a rumble before it is set
+    .rumble = kbm::Rumble,                    // changes a rumble before it is set: quiet it for keyboard players
     .title_id = "5655003F",                   // E:\UDATA save folder
 };

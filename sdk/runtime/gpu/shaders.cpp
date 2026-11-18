@@ -692,6 +692,12 @@ PixelKey MakePixelKey(const State& s, const TexInfo tex[4]) {
             k.ff[0][0] = 4;  // D3DTOP_MODULATE
             k.ff[0][1] = kTaCurrent;
             k.ff[0][2] = kTaTexture;
+            // the atlas has no alpha of its own: a panel's translucency is the diffuse alpha.  When the title selects
+            // alpha straight from the texture the panel draws opaque; modulate it with the diffuse alpha, exactly as
+            // the disabled-stage path above does.
+            k.ff[0][4] = 4;  // D3DTOP_MODULATE
+            k.ff[0][5] = kTaCurrent;
+            k.ff[0][6] = kTaTexture;
         }
     }
     return k;
