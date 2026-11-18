@@ -1933,8 +1933,9 @@ void D3D12Backend::LatchPackKey(Tex& tx, const TextureDesc& d, const FormatInfo&
     tx.swap = nullptr;
     uint64_t key = texturedumper::Key(d, fi, p, colours);
     texturedumper::Dump(key, d, p, colours);
-    // dumping alone keys the bytes too: the pack image is not drawn then
-    tx.pack_key = texturedumper::Replacing() ? key : 0;
+    // a key-prompt override uses its own synthetic key so the pack cache keeps real glyph images for pad mode
+    uint64_t override = texturedumper::ControllerGlyphOverrideKey(key);
+    tx.pack_key = override ? override : (texturedumper::Replacing() ? key : 0);
 }
 
 // the pack image for tx's bytes once it has loaded; textures with the same bytes share its GPU copy

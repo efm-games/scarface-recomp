@@ -10,6 +10,7 @@
 #include <dwmapi.h>
 #include <objbase.h>
 #include <shobjidl.h>
+#include <xinput.h>
 
 #include <algorithm>
 #include <cmath>
@@ -24,6 +25,7 @@
 #include <backends/imgui_impl_win32.h>
 
 #include "app/app.h"
+#include "core/input.h"
 #include "core/log.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
@@ -181,6 +183,7 @@ struct State {
     GameProbe probe;
     GameFiles files;
     bool play = false;
+    uint16_t pad_buttons = 0;  // last face-button report, for edge detection
 };
 
 void SetPath(State& s, std::string path) {
@@ -205,6 +208,18 @@ void Start(State& s) {
     }
     s.files = std::move(files);
     s.play = true;
+}
+
+// The ready game-code window uses A to press Start. Give the launcher's Play button the same reach: A on any pad
+// starts the game, on the press rather than while held, and the mismatched-release confirmation stays in charge.
+void PollGamepadPlay(State& s) {
+    uint16_t now = input::HeldOnAnyController();
+    uint16_t pressed = now & ~s.pad_buttons;
+    s.pad_buttons = now;
+    if (s.play || !(pressed & XINPUT_GAMEPAD_A) || ImGui::IsPopupOpen(kMismatch)) return;
+    if (s.path.empty() || !s.probe.found) return;
+    if (s.probe.match) Start(s);
+    else ImGui::OpenPopup(kMismatch);
 }
 
 void TabGame(State& s) {
@@ -257,6 +272,9 @@ void TabGame(State& s) {
     ImGui::Spacing();
     ImGui::Checkbox("Skip the intro videos", &s.settings.skip_intro);
     ImGui::TextDisabled("Starts at the menu without the publisher logos.");
+    ImGui::Spacing();
+    ImGui::Checkbox("Unlock all cheats", &s.settings.all_cheats_unlocked);
+    ImGui::TextDisabled("Every pause-menu cheat code is selectable from a new game; effects are still chosen manually.");
 }
 
 void TabDisplay(State& s) { ui::Display(s.settings, false); }
@@ -334,7 +352,7 @@ void Draw(State& s) {
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, kAccent);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, kAccentHover);
     ImGui::PushStyleColor(ImGuiCol_Text, kInk);
-    if (ImGui::Button("Play", ImVec2(play_width, 40 * unit))) {
+    if (ImGui::Button("Play (A)", ImVec2(play_width, 40 * unit))) {
         if (s.probe.match) Start(s);
         else if (s.probe.found) ImGui::OpenPopup(kMismatch);
     }
@@ -363,6 +381,7 @@ void Frame(State& s) {
     ImGui_ImplDX11_NewFrame();
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
+    PollGamepadPlay(s);
     Draw(s);
     ImGui::Render();
     const float clear[4] = {0.043f, 0.047f, 0.043f, 1.0f};
@@ -471,6 +490,9 @@ bool Launcher(GameFiles& game) {
     }
 
     bool com = SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
+    // The game-code window normally starts SDL later. The launcher can be the first window a player sees, so it has to
+    // start controller input itself or HeldOnAnyController() would never see a pad here.
+    input::Init();
     HINSTANCE instance = GetModuleHandleW(nullptr);
     std::wstring class_name = std::wstring(kGame.name) + L"Launcher";
     WNDCLASSEXW wc{sizeof(wc)};

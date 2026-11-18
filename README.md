@@ -7,24 +7,27 @@ The game's x86 code is statically recompiled ahead of time and the Xbox kernel/X
 > [!NOTE]
 > This project does not include any game assets. You must provide the files from your own legally acquired copy of the game to play or build. The disc image is **not** part of this repository or its releases.
 
+> [!NOTE]
+> This project was built with AI assistance using OpenCode and the Big Pickle agent. The AI helped with reverse-engineering analysis, implementation, documentation and release preparation under human direction and testing. No AI-generated game assets are included; see [AI assistance](#ai-assistance) for details.
+
 ## Release
 
-This is the `v1.0.0` release. The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a keyboard and mouse or a gamepad. See [Known issues](#known-issues) for the remaining rough edges.
+This is the `v1.1.0` release. The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a keyboard and mouse or a gamepad. See [Known issues](#known-issues) for the remaining rough edges.
 
-### What's new in v1.0.0
+### What's new in v1.1.0
 
-- Experimental 60 fps mode, off by default, from the launcher, the F1 overlay or `settings.toml`; see [docs/experimental-fps.md](docs/experimental-fps.md).
-- Optional FXAA antialiasing, off by default, available from the launcher, the F1 overlay and `settings.toml`.
-- Optional GTA-style gamepad preset (RT accelerate, LT brake), off by default, with a live bindings panel in the launcher and F1 overlay.
-- The executable now uses the original PC game's icon.
-- Documented the white UI panel bug and its fix in [docs/white-ui-panels.md](docs/white-ui-panels.md).
+- HUD key prompts replace pad glyphs with plain-text PC key labels while keyboard/mouse is active; the original glyphs return as soon as a pad is used. The music library keeps the prompt style it had when opened. Technical details are in [docs/hud-glyphs-hotkeys.md](docs/hud-glyphs-hotkeys.md).
+- **Unlock all cheats** makes every pause-menu code selectable from a new game; effects are still chosen manually.
+- Fixed the Esc pause path so one physical press opens the pause menu without immediately closing it.
+- The launcher's **Play (A)** button can be activated with gamepad **A**, matching the ready screen's Start (A).
+- Mouse sensitivity now has separate horizontal and vertical sliders, with migration of the old single setting.
 
 ## Installation
 
-1. Download `Scarface-v1.0.0.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
+1. Download `Scarface-v1.1.0.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
 2. Run `Scarface.exe`.
 3. Click **Browse for the disc image...** and pick your Xbox `.iso`/`.xiso` (a whole-disc dump also works), or **Use an extracted folder...** and pick the folder that holds `default.xbe`. The launcher remembers the path.
-4. Click **Play**. The first start compiles the game's code for your PC once with the bundled recompiler and Clang; it takes a few minutes and about 1 GB of free disk space. Every later start goes straight into the game.
+4. Click **Play (A)** or press gamepad **A**. The first start compiles the game's code for your PC once with the bundled recompiler and Clang; it takes a few minutes and about 1 GB of free disk space. Every later start goes straight into the game.
 
 The executable checks the game's `default.xbe` SHA-1 (`9367786d1b3bc9b35208a29a7ddca29487af0f5d`). If your image is a different release, the launcher warns you and lets you try it anyway.
 
@@ -55,7 +58,7 @@ Defaults follow the official PC manual. The keyboard and mouse layer synthesizes
 
 Menus work with the mouse or the arrow keys, Enter (select) and Esc (back). Xbox, PlayStation and Switch controllers are detected automatically and can be used alongside the keyboard and mouse; the active device switches on the fly. See [docs/controls.md](docs/controls.md) for the complete tables.
 
-Mouse sensitivity and Y inversion are in the options.
+Mouse sensitivity X and Y are separate options, along with Y inversion. The old single `kbm_sensitivity` value is migrated to both axes.
 
 ## Features
 
@@ -74,20 +77,21 @@ Mouse sensitivity and Y inversion are in the options.
 ### Controller and keyboard/mouse
 - Xbox, PlayStation and Switch controllers through SDL3, with hot plugging and rumble.
 - Keyboard and mouse support following the official PC manual, with automatic on-foot/vehicle bindings.
+- Optional HUD key prompts replace pad glyphs with plain-text key labels while keyboard/mouse is active (or before any input). Line-specific rules follow the PC manual: Start/Load/Accept/Cover and dialog `[CLOSE]` are `[Enter]`, sprint is `[Shift]`, cancel/back/create are `[Esc]`, taunt is `[T]`, rage is `[V]` and pick up/interact is `[E]`. Plain triangle/Y captions get an `[E] ` prefix; the tape-player glyph before `PLAY`/`STOP` is replaced by `[T] `, and the Shuffle caption becomes `[Enter] SHUFFLE ON/OFF` (the original "TURN" wording is kept for gamepad prompts). Outside the music library, the original glyphs return as soon as a controller is used. The music library snapshots the active input when its page opens and keeps that style until you leave.
 - Optional GTA-style gamepad preset (RT accelerate, LT brake), off by default.
 
 ### Launcher, options and saves
-- Launcher with a disc image picker, an extracted-folder picker, display/input options and the intro-skip toggle.
+- Launcher with a disc image picker, an extracted-folder picker, display/input options, the intro-skip toggle and an **Unlock all cheats** option that makes every pause-menu cheat code selectable from a new game (effects are still chosen manually). Gamepad **A** activates the **Play (A)** button just like the ready screen's Start (A) button.
 - In-game options overlay (**F1**) covering display, controls, advanced rendering and game settings.
 - Save manager that keeps the game's Xbox-format saves in `hdd\E\UDATA\5655003F` beside the executable and can import an Xbox save folder.
 - Screenshots with **F2**, saved as BMP files in `screenshots` beside the executable.
 - Optional intro skip (off by default), crash dumps and log files.
 - Frame and state captures with **F2**/**F3** and the debug variables in [docs/debugging.md](docs/debugging.md).
 - History of the fixed white UI panel bug in [docs/white-ui-panels.md](docs/white-ui-panels.md).
+- Technical notes on HUD glyphs and key prompts in [docs/hud-glyphs-hotkeys.md](docs/hud-glyphs-hotkeys.md).
 
 ## Known issues
 
-- The HUD still shows Xbox pad glyphs while playing with keyboard and mouse.
 - Texture pop-in during play.
 - Save import is new; back up unusual save folders before importing.
 - Not every Xbox feature has been exercised.
@@ -109,6 +113,10 @@ Run `build.bat`. The first build recompiles the game and takes a while; the exec
 `release.bat` builds the same executable and packages a release archive (executable, empty `assets` folder, compiler, runtime DLLs, this README and the controls page) using Windows' built-in `tar`.
 
 The XBE used for the build must be the same release as the one in the image you run: the executable checks its SHA-1.
+
+## AI assistance
+
+This project was developed with AI assistance using OpenCode and the Big Pickle agent. The AI helped with reverse-engineering analysis, native runtime, renderer and input work, documentation, build and release preparation, and testing support. The maintainer directed the work, made the design decisions, integrated the changes and playtested the result. No AI-generated art, music, sound effects or placeholder game assets are included; the game uses the original Xbox assets supplied by the player.
 
 ## Credits
 

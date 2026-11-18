@@ -25,14 +25,18 @@
 #include "app/app.h"
 #include "core/input.h"
 #include "core/log.h"
+#include "game/hud_prompts.h"
+#include "gpu/texturedumper.h"
 #include "kernel/memory.h"
 
 namespace kbm {
 
 bool enabled = true;
 bool invert_y = false;
-uint32_t sensitivity = 100;  // percent
+uint32_t sensitivity_x = 100;  // percent of the base look speed
+uint32_t sensitivity_y = 100;  // percent of the base look speed
 bool modern_pad = false;
+bool hud_prompts = true;
 
 namespace {
 
@@ -44,6 +48,7 @@ bool g_lmb = false, g_rmb = false, g_mmb = false;
 int g_dx = 0, g_dy = 0;
 int g_wheel = 0;
 bool g_cursor_shown = true;
+bool g_escape_latched = false;  // one virtual Start/B press per physical Esc press
 void* g_hwnd = nullptr;  // the game window, for posting WM_SETCURSOR from the game thread
 std::atomic<Device> g_device{Device::None};
 
@@ -162,20 +167,21 @@ ActionMaps ReadActionMaps() {
                 maps.vehicle = false;
                 break;
             }
-            // front end screens push their own maps: their back button is B, not Start. The game names these
-            // PauseActionMap / SystemDialogActionMap (and reuses them for pages like Options), not just "Menu".
-            if (std::strstr(name, "Menu") || std::strstr(name, "FrontEnd") || std::strstr(name, "Options") ||
-                std::strstr(name, "Pause") || std::strstr(name, "Dialog")) {
-                maps.menu = true;
-            }
+            // Front-end screens push their own maps, but only the topmost map decides how Esc and Enter behave.
+            // Do not set maps.menu here: PauseActionMap / UnpauseActionMap can remain below CharacterActionMap,
+            // and treating that as a menu would send pad B (taunt) when Esc should send Start (pause).
         }
         node_va = next_va;
     }
 
-    // Only the topmost map decides how Enter behaves. SystemDialogActionMap is pushed for notices such as
-    // "Load profile successful"; the game dismisses those with the pad's B (V on the PC bindings), not its A,
-    // so Enter has to send B there. Checking the top avoids leaking B into play if a dialog lingers in the stack.
-    if (std::strstr(top_name, "Dialog")) maps.dialog = true;
+    // Only the topmost map decides how Esc and Enter behave. PauseActionMap and its friends make Esc the pad's
+    // back (B); in the world it must stay Start. SystemDialogActionMap is pushed for notices such as
+    // "Load profile successful"; the game dismisses those with B (V on the PC bindings), not A, so Enter sends
+    // B there too. Checking the top avoids leaking those bindings into play when such a map is still in the stack.
+    maps.menu = std::strstr(top_name, "Menu") != nullptr || std::strstr(top_name, "FrontEnd") != nullptr ||
+                std::strstr(top_name, "Options") != nullptr || std::strstr(top_name, "Pause") != nullptr ||
+                std::strstr(top_name, "Dialog") != nullptr;
+    maps.dialog = std::strstr(top_name, "Dialog") != nullptr;
 
     if (top_name[0] != '\0' && std::strncmp(s_last_top, top_name, sizeof(s_last_top)) != 0) {
         std::strncpy(s_last_top, top_name, sizeof(s_last_top) - 1);
@@ -305,6 +311,7 @@ void Pad(int port, input::Pad& pad) {
         pad.buttons = 0;
         for (uint8_t& a : pad.analog) a = 0;
         pad.lx = pad.ly = pad.rx = pad.ry = 0;
+        g_escape_latched = false;
         return;
     }
     // Remap only the physical pad, before the keyboard/mouse early-out so pad-only players get it too,
@@ -315,6 +322,7 @@ void Pad(int port, input::Pad& pad) {
     if (!enabled || !g_active) {
         // do not keep a look delta: turning the keyboard back on must not snap the camera
         g_dx = g_dy = g_wheel = 0;
+        g_escape_latched = false;
         return;
     }
 
@@ -347,9 +355,10 @@ void Pad(int port, input::Pad& pad) {
     int dx = g_dx, dy = g_dy;
     g_dx = g_dy = 0;
     if (dx || dy) {
-        float scale = kBaseLook * (float(sensitivity) / 100.0f);
-        float rx = float(dx) * scale;
-        float ry = invert_y ? float(dy) * scale : -float(dy) * scale;
+        float sx = kBaseLook * (float(sensitivity_x) / 100.0f);
+        float sy = kBaseLook * (float(sensitivity_y) / 100.0f);
+        float rx = float(dx) * sx;
+        float ry = invert_y ? float(dy) * sy : -float(dy) * sy;
         krx = int16_t(std::clamp<long>(std::lround(rx), -32768, 32767));
         kry = int16_t(std::clamp<long>(std::lround(ry), -32768, 32767));
     }
@@ -417,12 +426,14 @@ void Pad(int port, input::Pad& pad) {
     // SAT phone: Tab
     if (Held(VK_TAB)) analog[kWhite] = 0xFF;
 
-    // Pause / Esc: Start in the world, B in a front end screen (the pad's back). Sending Start and B together would
-    // open the pause menu and back out of it in the same poll.
-    if (Held(VK_ESCAPE)) {
+    // Pause / Esc: Start in the world, B in a front end screen (the pad's back). Emit only on the key's rising edge;
+    // a held Esc would otherwise send Start, see the pause map on the next poll, then send B and close it again.
+    bool escape = Held(VK_ESCAPE);
+    if (escape && !g_escape_latched) {
         if (maps.menu) analog[kB] = 0xFF;
         else buttons |= kStart;
     }
+    g_escape_latched = escape;
     // Enter: Select (A) in menus and wall cover on foot. In a vehicle A is the accelerator and the PC manual
     // gives Enter no driving meaning, so it must not fall through there. System dialogs use B (pad back/dismiss),
     // which is what the PC scheme shows as V on the "Load profile successful" screen.
@@ -451,14 +462,30 @@ void Pad(int port, input::Pad& pad) {
     pad.rx = AddStick(pad.rx, krx);
     pad.ry = AddStick(pad.ry, kry);
 
+    bool feature_enabled = enabled && hud_prompts;
     if (kbm_active || pad_active) {
         Device now = kbm_active ? Device::KeyboardMouse : Device::Pad;
-        if (g_device.exchange(now, std::memory_order_relaxed) != now)
+        if (g_device.exchange(now, std::memory_order_relaxed) != now) {
             LOGI("input: %s is driving", now == Device::KeyboardMouse ? "keyboard and mouse" : "controller");
+            // The music library keeps the prompts it had on entry; other screens rewrite cached captions on a
+            // device switch so a keyboard label never survives when a pad takes over.
+            if (!hud_prompts::Frozen()) ApplyHudDeviceText(feature_enabled && now != Device::Pad);
+        }
     }
+
+    // Hide the pad artwork only while bracketed key prompts are driving the HUD. The music library uses the same
+    // frozen decision as its text, so switching devices on that page does not half-convert its prompts.
+    gpu::texturedumper::SetControllerGlyphOverride(hud_prompts::UseKeyLabels());
 }
 
 Device LastDevice() { return g_device.load(std::memory_order_relaxed); }
+
+PromptContext PromptContextNow() {
+    ActionMaps maps = ReadActionMaps();
+    if (maps.menu) return PromptContext::Menu;
+    if (maps.vehicle) return PromptContext::Vehicle;
+    return PromptContext::OnFoot;
+}
 
 void Rumble(int, uint16_t& left, uint16_t& right) {
     // A keyboard/mouse player has no pad in their hands: drop the motors so a connected controller does not

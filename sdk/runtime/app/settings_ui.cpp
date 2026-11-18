@@ -210,6 +210,8 @@ void ControllerNote() {
     ImGui::Spacing();
     ImGui::TextWrapped("Controllers (Xbox, PlayStation and Switch) are detected automatically. The keyboard and mouse "
                        "work alongside a connected controller; whichever you touch last drives the game.");
+    ImGui::TextWrapped("With PC key prompts enabled, HUD button glyphs become key labels while the keyboard or mouse "
+                       "is active. Touching a controller brings the original glyphs straight back.");
 }
 
 void ModernControls() {

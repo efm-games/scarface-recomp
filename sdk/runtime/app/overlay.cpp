@@ -52,6 +52,9 @@ void GameTab() {
     ImGui::Checkbox("Skip the intro videos", &s.skip_intro);
     ImGui::TextDisabled("Starts at the menu without the publisher logos.");
     ImGui::Spacing();
+    ImGui::Checkbox("Unlock all cheats", &s.all_cheats_unlocked);
+    ImGui::TextDisabled("Every pause-menu cheat code is selectable from a new game; effects are still chosen manually.");
+    ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
     ImGui::TextWrapped("This game's own settings, such as the keyboard and mouse bindings, are in the Controls tab. "

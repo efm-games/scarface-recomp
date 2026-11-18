@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <cstdint>
 #include <vector>
 
@@ -34,6 +35,11 @@ bool Update();
 uint32_t Generation();
 // replacement on and the pack holds images
 bool Replacing();
+
+// While PC key prompts drive the HUD, the game's own controller artwork is swapped for a transparent texture. The
+// swap is keyed by the original texture's bytes, so a real pad can bring every glyph back on its next input.
+void SetControllerGlyphOverride(bool enabled);
+uint64_t ControllerGlyphOverrideKey(uint64_t key);
 
 // the name of a texture's bytes, a P8 texture's with its 256 colours; 0 when neither the pack nor dumping applies
 uint64_t Key(const TextureDesc& d, const FormatInfo& fi, const uint8_t* guest, const uint32_t* palette);

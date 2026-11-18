@@ -102,6 +102,21 @@ input as accelerate, so pressing B also gives a brief throttle input.
 - **Simultaneous gamepad + keyboard/mouse:** Real controller inputs and keyboard/mouse inputs augment
   each other without conflict. Digital buttons are OR'd, analog triggers take `max()`, and stick inputs
   are clamped additions. Active input device transitions on the fly without disabling either.
+- **HUD key prompts:** With `hud_key_prompts = true`, pad glyph tokens in HUD text become bracketed key
+  labels while keyboard/mouse is active (or before the first input). The substitution is
+  context-sensitive, and the words on the prompt line settle shared meanings: Start, Load, Accept and
+  Cover and dialog `[CLOSE]` are `[Enter]`, sprint is `[Shift]`, cancel/back/create are `[Esc]`,
+  taunt is `[T]`, rage is `[V]` and pick up/interact is `[E]`. A bare A token otherwise means Shift on foot and W while
+  driving. Plain triangle/Y captions get `[E] ` in front of their original wording; the tape-player glyph before
+  `PLAY`/`STOP` is replaced with `[T] `, and the Shuffle caption becomes `[Enter] SHUFFLE ON/OFF`, matching the key
+  that toggles it on that screen and dropping "TURN" so it does not overlap the adjacent tip. Gamepad prompts keep the
+  original wording. Outside the music library, using a controller removes injected labels and restores the original
+  glyphs. The music library snapshots the active input
+  when its page opens and keeps that style until you leave, so switching devices on that screen does not mix labels
+  and glyphs. See [hud-glyphs-hotkeys.md](hud-glyphs-hotkeys.md) for the technical details.
+- **Mouse look:** Raw X and Y deltas have separate `kbm_sensitivity_x` and `kbm_sensitivity_y` sliders
+  in the launcher/F1 options, and `invert_y` flips only the vertical sign. The old single
+  `kbm_sensitivity` setting is migrated to both axes.
 - **Overlay capture:** When the ImGui options overlay (F1) is open, keyboard and mouse inputs are
   neutralized to prevent unintended in-game actions.
 

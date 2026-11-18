@@ -34,6 +34,7 @@ struct Settings {
     bool launcher = true;                  // show the launcher at start
     bool show_fps = false;                 // a small frame rate counter in the corner
     bool skip_intro = false;               // skip the publisher logos before the menu
+    bool all_cheats_unlocked = false;      // make every pause-menu cheat selectable from a new game
     bool experimental_60fps = false;       // fixed 60 fps mode: skip the guest's 30 Hz wait, see docs/experimental-fps.md
 };
 

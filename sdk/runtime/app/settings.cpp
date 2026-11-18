@@ -62,6 +62,7 @@ void Load() {
     s.launcher = t["launcher"].value_or(s.launcher);
     s.show_fps = t["show_fps"].value_or(s.show_fps);
     s.skip_intro = t["skip_intro"].value_or(s.skip_intro);
+    s.all_cheats_unlocked = t["all_cheats_unlocked"].value_or(s.all_cheats_unlocked);
     s.experimental_60fps = t["experimental_60fps"].value_or(s.experimental_60fps);
     for (const Option& o : kGame.options) {
         if (o.flag) *o.flag = t[o.key].value_or(*o.flag);
@@ -90,6 +91,7 @@ toml::table Table() {
                   {"launcher", s.launcher},
                   {"show_fps", s.show_fps},
                   {"skip_intro", s.skip_intro},
+                  {"all_cheats_unlocked", s.all_cheats_unlocked},
                   {"experimental_60fps", s.experimental_60fps}};
     for (const Option& o : kGame.options) {
         if (o.flag) t.insert(o.key, *o.flag);

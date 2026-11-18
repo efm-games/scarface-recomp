@@ -11,6 +11,7 @@
 #include <wrl/client.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
@@ -49,6 +50,39 @@ constexpr uint32_t kWatchRetry = 120;  // presents between tries while the pack 
 constexpr DWORD kPackChanges = FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME |
                                FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_SIZE;
 
+// The game's own controller artwork: face buttons, Start, three shoulder drawings, and the pause-menu pad icons.
+// Some buttons have two runtime keys: menus bind a differently compressed copy of the same drawing. Both are listed.
+// Their keys are hashes of the original DXT3 bytes, so the override needs no image files and touches nothing else.
+constexpr uint64_t kControllerGlyphOverrideBase = 0x4B424D4F00000000ull;  // "KBMO" in the high dword
+struct ControllerGlyph {
+    uint64_t key;
+    uint32_t width;
+    uint32_t height;
+};
+constexpr std::array<ControllerGlyph, 14> kControllerGlyphs{{
+    {0xe22ce6b0a773a3e7ull, 32, 32},  // Ps2_ex.tga, A
+    {0xef5d3ac3a2813e63ull, 32, 32},  // A, menu copy
+    {0x0d967a1d1c291077ull, 32, 32},  // Ps2_circle.tga, B
+    {0xe8f14553424c85f6ull, 32, 32},  // B, menu copy
+    {0xacf5eb7e815d9a43ull, 32, 32},  // Ps2_square.tga, X
+    {0x53fab62a25c59d2dull, 32, 32},  // X, menu copy
+    {0x8a1d640478d14d3dull, 32, 32},  // Ps2_trangle.tga, Y
+    {0xe55b7efd18d9fa2bull, 32, 32},  // Y, menu copy
+    {0xa751c7df49c9e91aull, 32, 32},  // Ps2_start.tga
+    {0xc76133703868d0e0ull, 32, 32},  // Start, menu copy
+    {0x5e41bde99c04d051ull, 128, 128},  // tutorial_analog_controller_R.tga
+    {0x6a935ef58534aa9cull, 128, 128},  // tutorial_analog_controller_R1.tga
+    {0xc61ef1e2a4605f16ull, 128, 128},  // tutorial_analog_controller_L1.tga
+    {0x322677a36bb6d2e3ull, 64, 64},  // pause_menu_icons_controller.tga
+}};
+std::atomic<bool> g_controller_glyph_override{false};
+
+uint32_t ControllerGlyphIndex(uint64_t key) {
+    for (uint32_t i = 0; i < kControllerGlyphs.size(); ++i)
+        if (kControllerGlyphs[i].key == key) return i + 1;
+    return 0;
+}
+
 using Clock = std::chrono::steady_clock;
 
 // the settings as Update latched them, the render thread's
@@ -61,7 +95,7 @@ struct Latched {
 
 struct Pack {
     Latched set;
-    uint32_t generation = 1;
+    std::atomic<uint32_t> generation{1};
     fs::path pack_dir;
     fs::path dump_dir;
     std::unordered_map<uint64_t, fs::path> files;  // by the key in their names; written by Update alone
@@ -137,6 +171,19 @@ LevelShape Shape(DXGI_FORMAT f, uint32_t w, uint32_t h) {
         case DXGI_FORMAT_R8G8B8A8_UNORM: return {w * 4, h};
         default: return {0, 0};
     }
+}
+
+// A fully transparent BC2 level: DXT3's 4-bit alpha is zero in every block, so alpha-tested and blended HUD draws
+// both discard the glyph. The original texture bytes are untouched.
+Image TransparentControllerGlyph(uint32_t index) {
+    const ControllerGlyph& glyph = kControllerGlyphs[index];
+    Image img;
+    img.format = DXGI_FORMAT_BC2_UNORM;
+    img.width = glyph.width;
+    img.height = glyph.height;
+    LevelShape shape = Shape(img.format, img.width, img.height);
+    img.levels.push_back(Level{std::vector<uint8_t>(size_t(shape.pitch) * shape.rows, 0), shape.pitch});
+    return img;
 }
 
 uint32_t FullChain(uint32_t w, uint32_t h) {
@@ -549,12 +596,25 @@ bool Update() {
     return reloaded;
 }
 
-uint32_t Generation() { return g.generation; }
+uint32_t Generation() { return g.generation.load(std::memory_order_acquire); }
 
 bool Replacing() { return g.set.replacing && !g.files.empty(); }
 
+void SetControllerGlyphOverride(bool enabled) {
+    bool expected = !enabled;
+    if (!g_controller_glyph_override.compare_exchange_strong(expected, enabled, std::memory_order_acq_rel)) return;
+    // Every texture must re-key on the next draw: the glyphs switch back the moment a pad sends input.
+    g.generation.fetch_add(1, std::memory_order_release);
+}
+
+uint64_t ControllerGlyphOverrideKey(uint64_t key) {
+    if (!g_controller_glyph_override.load(std::memory_order_relaxed)) return 0;
+    uint32_t index = ControllerGlyphIndex(key);
+    return index ? kControllerGlyphOverrideBase | index : 0;
+}
+
 uint64_t Key(const TextureDesc& d, const FormatInfo& fi, const uint8_t* guest, const uint32_t* palette) {
-    if (!Replacing() && !g.set.dumping) return 0;
+    if (!Replacing() && !g.set.dumping && !g_controller_glyph_override.load(std::memory_order_relaxed)) return 0;
     // cube maps, volumes and depth stay the console's; linear ones are movie frames and the game's own copies
     if (d.cube || d.depth > 1 || d.linear || UploadFormat(fi.host) == DXGI_FORMAT_UNKNOWN) return 0;
     uint32_t shape[] = {d.format, d.width, d.height};
@@ -581,6 +641,14 @@ void Dump(uint64_t key, const TextureDesc& d, const uint8_t* guest, const uint32
 }
 
 Lookup Take(uint64_t key, Image& out) {
+    if (g_controller_glyph_override.load(std::memory_order_relaxed) &&
+        (key & 0xFFFFFFFFFFFFFF00ull) == kControllerGlyphOverrideBase) {
+        uint32_t index = uint32_t(key & 0xFF);
+        if (index && index <= kControllerGlyphs.size()) {
+            out = TransparentControllerGlyph(index - 1);
+            return Lookup::Ready;
+        }
+    }
     auto file = g.files.find(key);
     if (!g.set.replacing || file == g.files.end()) return Lookup::None;
     uint32_t revision = 0;
