@@ -120,6 +120,7 @@ void Overlay(double fps) {
         }
         if (ImGui::BeginTabItem("Controls")) {
             ui::InputOptions();
+            ui::ModernControls();
             ui::ControllerNote();
             ui::KeyBindings();
             ImGui::EndTabItem();

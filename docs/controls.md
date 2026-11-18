@@ -67,6 +67,31 @@ Context is automatically detected via `WheeledVehicleActionMap`, `BoatActionMap`
 | F2 | Save the current frame as a BMP in the `screenshots` folder beside the executable |
 | F3 | Capture the next frame in full under the `capture` folder, for debugging (see [debugging.md](debugging.md)) |
 
+## Modern gamepad controls (optional)
+
+Set `modern_pad = true` in `settings.toml`, or tick **Modern gamepad controls (GTA-style)** in the Controls tab
+of the launcher or the F1 overlay. It is off by default and remaps only a physical pad; the keyboard and mouse
+bindings above are unchanged.
+
+| Pad input | Action while driving |
+| --- | --- |
+| RT | Accelerate |
+| LT | Brake / reverse |
+| A | Handbrake |
+| B | Horn |
+| RB | Fire from the vehicle |
+| LB | Look back |
+| L3 | Lock target |
+| Back | SAT phone menu |
+| X | Original brake, still available as a secondary pedal |
+| Left stick | Steer |
+| Right stick | Camera |
+| Y / d-pad / R3 | Enter or exit / weapons / camera view as before |
+
+On foot the original layout already follows the twin-stick convention (left stick move, right stick camera,
+RT fire, LT lock), so it is left unchanged. The game has no separate horn button: the horn is the same pad
+input as accelerate, so pressing B also gives a brief throttle input.
+
 ## Implementation Notes
 
 - **Context-sensitive detection (`InVehicle()`):** The guest ActionMap stack is tracked at guest

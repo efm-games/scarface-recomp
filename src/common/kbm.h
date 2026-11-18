@@ -15,6 +15,7 @@ namespace kbm {
 extern bool enabled;
 extern bool invert_y;
 extern uint32_t sensitivity;  // percent of the base look speed
+extern bool modern_pad;       // GTA-style driving on a physical pad, off by default
 
 // the device that last did something, for prompts that name a button
 enum class Device : uint32_t { None, Pad, KeyboardMouse };

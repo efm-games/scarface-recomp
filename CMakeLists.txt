@@ -37,3 +37,10 @@ endif()
 
 # target name = GAME_EXE in build.bat, xbe = GAME_XBE
 add_xbe_image(Scarface default.xbe game.toml ${GAME_PARTITIONS} game)
+
+# use the original PC game's icon for the executable
+if(WIN32)
+    file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/scarface.rc
+         CONTENT "1 ICON \"${CMAKE_CURRENT_SOURCE_DIR}/src/scarface.ico\"\n")
+    target_sources(Scarface PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/scarface.rc)
+endif()

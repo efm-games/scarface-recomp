@@ -14,7 +14,8 @@ const app::GameInfo app::kGame = {
     .images = {{"default.xbe", "Scarface"}},  // each recompiled xbe and its exe, for title launches
     .options = {{"kbm", &kbm::enabled, nullptr, "Keyboard and mouse"},
                 {"kbm_invert_y", &kbm::invert_y, nullptr, "Invert mouse Y"},
-                {"kbm_sensitivity", nullptr, &kbm::sensitivity, "Mouse sensitivity", 10, 300}},
+                {"kbm_sensitivity", nullptr, &kbm::sensitivity, "Mouse sensitivity", 10, 300},
+                {"modern_pad", &kbm::modern_pad, nullptr, "Modern gamepad controls (GTA-style)"}},
     // reference only: the bindings live in kbm.cpp, and these rows must stay in step with it
     .controls =
         {{"On foot",

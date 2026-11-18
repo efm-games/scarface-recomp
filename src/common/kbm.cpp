@@ -32,6 +32,7 @@ namespace kbm {
 bool enabled = true;
 bool invert_y = false;
 uint32_t sensitivity = 100;  // percent
+bool modern_pad = false;
 
 namespace {
 
@@ -59,6 +60,26 @@ bool Held(int vk) { return g_keys[vk & 0xFF]; }
 
 int16_t AddStick(int16_t a, int16_t b) {
     return int16_t(std::clamp(int(a) + int(b), -32768, 32767));
+}
+
+// Optional GTA-style driving on a physical pad: the triggers are the pedals, the bumpers take over the
+// trigger actions, A is the handbrake, B is the horn, and L3 locks on. X stays a secondary brake so the
+// classic scheme still works. Back opens the SAT phone. On foot the original layout already follows the
+// same twin-stick conventions, so nothing changes there. Called before any keyboard/mouse is merged in.
+void ModernDriving(input::Pad& pad) {
+    uint8_t gas = pad.analog[kRT], brake = pad.analog[kLT];
+    uint8_t fire = pad.analog[kBlack], look = pad.analog[kWhite];
+    uint8_t handbrake = pad.analog[kA], horn = pad.analog[kB];
+    // The game has no separate horn button: in the Xbox pad report the horn is the same A button as the
+    // accelerator. Pressing B therefore also gives a short throttle input; it is unavoidable without
+    // changing the guest.
+    pad.analog[kA] = std::max(gas, horn);  // RT accelerates, B sounds the horn
+    pad.analog[kX] = std::max(pad.analog[kX], brake);
+    pad.analog[kB] = handbrake;                               // A handbrakes
+    pad.analog[kRT] = fire;                                   // bumper fires
+    pad.analog[kBlack] = look;                                // other bumper looks back
+    pad.analog[kLT] = (pad.buttons & kLeftThumb) ? 0xFF : 0;  // L3 locks on
+    pad.analog[kWhite] = (pad.buttons & kBack) ? 0xFF : 0;    // Back opens the SAT phone
 }
 
 // did a real controller do anything since the last poll? stick drift and trigger noise are ignored
@@ -286,6 +307,10 @@ void Pad(int port, input::Pad& pad) {
         pad.lx = pad.ly = pad.rx = pad.ry = 0;
         return;
     }
+    // Remap only the physical pad, before the keyboard/mouse early-out so pad-only players get it too,
+    // and before any synthesized input is added. The overlay case above already zeroes everything.
+    if (modern_pad && ReadActionMaps().vehicle) ModernDriving(pad);
+
     std::lock_guard lock(g_lock);
     if (!enabled || !g_active) {
         // do not keep a look delta: turning the keyboard back on must not snap the camera

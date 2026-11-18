@@ -166,6 +166,7 @@ bool LoadFont(float unit);  // Segoe UI at this scale; false when the font is mi
 void Display(Settings& s, bool live);  // live: apply a mode or resolution change as it is made
 void InputOptions();                   // this game's own settings, kGame.options
 void ControllerNote();
+void ModernControls();                 // active GTA-style pad bindings, shown when the preset is enabled
 void KeyBindings();                    // kGame.controls, the default keyboard and mouse bindings
 void Advanced(Settings& s);
 

@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -203,6 +204,49 @@ void ControllerNote() {
     ImGui::Spacing();
     ImGui::TextWrapped("Controllers (Xbox, PlayStation and Switch) are detected automatically. The keyboard and mouse "
                        "work alongside a connected controller; whichever you touch last drives the game.");
+}
+
+void ModernControls() {
+    bool enabled = false;
+    for (const Option& o : kGame.options)
+        if (o.flag && std::strcmp(o.key, "modern_pad") == 0) enabled = *o.flag;
+    if (!enabled) return;
+
+    static const ControlHint kDriving[] = {
+        {"RT", "Accelerate"},
+        {"LT", "Brake / reverse"},
+        {"A", "Handbrake"},
+        {"B", "Horn (the game shares this input with accelerate)"},
+        {"RB", "Fire from the vehicle"},
+        {"LB", "Look back"},
+        {"L3", "Lock target"},
+        {"Back", "SAT phone menu"},
+        {"X", "Original brake, available as a secondary pedal"},
+        {"Left stick", "Steer"},
+        {"Right stick", "Camera"},
+        {"Y / d-pad / R3", "Enter or exit / weapons / camera view"},
+    };
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+    ImGui::TextColored(kAccent, "Modern gamepad controls - active bindings");
+    ImGui::TextWrapped("Only the physical pad is remapped, and only while driving. On foot the original pad "
+                       "layout applies; keyboard and mouse bindings are unchanged.");
+    if (ImGui::BeginTable("##modern-controls", 2,
+                          ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg |
+                              ImGuiTableFlags_BordersInnerV)) {
+        ImGui::TableSetupColumn("Pad", ImGuiTableColumnFlags_WidthStretch, 0.38f);
+        ImGui::TableSetupColumn("Action while driving", ImGuiTableColumnFlags_WidthStretch, 0.62f);
+        for (const ControlHint& hint : kDriving) {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextUnformatted(hint.keys);
+            ImGui::TableSetColumnIndex(1);
+            ImGui::TextWrapped("%s", hint.action);
+        }
+        ImGui::EndTable();
+    }
 }
 
 void KeyBindings() {
