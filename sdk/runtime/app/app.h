@@ -16,6 +16,7 @@ namespace app {
 enum class DisplayMode : uint32_t { Fullscreen, Borderless, Windowed };
 enum class AntiAliasing : uint32_t { Off, Fxaa };
 inline constexpr uint32_t kFpsCapRefresh = 1;  // fps_cap: the monitor's refresh rate
+inline constexpr uint32_t kExperimentalFps = 60;  // fixed cap while the experimental mode is on
 
 struct Settings {
     DisplayMode display_mode = DisplayMode::Borderless;
@@ -33,6 +34,7 @@ struct Settings {
     bool launcher = true;                  // show the launcher at start
     bool show_fps = false;                 // a small frame rate counter in the corner
     bool skip_intro = false;               // skip the publisher logos before the menu
+    bool experimental_60fps = false;       // fixed 60 fps mode: skip the guest's 30 Hz wait, see docs/experimental-fps.md
 };
 
 Settings& Get();

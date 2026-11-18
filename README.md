@@ -7,12 +7,13 @@ The game's x86 code is statically recompiled ahead of time and the Xbox kernel/X
 > [!NOTE]
 > This project does not include any game assets. You must provide the files from your own legally acquired copy of the game to play or build. The disc image is **not** part of this repository or its releases.
 
-## Playable preview
+## Release
 
-This is a public preview (`v0.3.0`). The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a keyboard and mouse or a gamepad. Expect rough edges; see [Known issues](#known-issues).
+This is the `v1.0.0` release. The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a keyboard and mouse or a gamepad. See [Known issues](#known-issues) for the remaining rough edges.
 
-### What's new in v0.3.0
+### What's new in v1.0.0
 
+- Experimental 60 fps mode, off by default, from the launcher, the F1 overlay or `settings.toml`; see [docs/experimental-fps.md](docs/experimental-fps.md).
 - Optional FXAA antialiasing, off by default, available from the launcher, the F1 overlay and `settings.toml`.
 - Optional GTA-style gamepad preset (RT accelerate, LT brake), off by default, with a live bindings panel in the launcher and F1 overlay.
 - The executable now uses the original PC game's icon.
@@ -20,7 +21,7 @@ This is a public preview (`v0.3.0`). The game boots from your own Xbox disc imag
 
 ## Installation
 
-1. Download `Scarface-v0.3.0.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
+1. Download `Scarface-v1.0.0.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
 2. Run `Scarface.exe`.
 3. Click **Browse for the disc image...** and pick your Xbox `.iso`/`.xiso` (a whole-disc dump also works), or **Use an extracted folder...** and pick the folder that holds `default.xbe`. The launcher remembers the path.
 4. Click **Play**. The first start compiles the game's code for your PC once with the bundled recompiler and Clang; it takes a few minutes and about 1 GB of free disk space. Every later start goes straight into the game.
@@ -60,6 +61,7 @@ Mouse sensitivity and Y inversion are in the options.
 
 ### Display
 - Windowed, borderless and fullscreen modes, resolution choice, internal render scale, anisotropic filtering, optional FXAA antialiasing, FPS cap, vsync and an optional FPS counter, from the launcher, the F1 overlay or `settings.toml`.
+- Experimental 60 fps mode (off by default) that skips the game's own 30 Hz wait; see [docs/experimental-fps.md](docs/experimental-fps.md).
 - Widescreen output.
 
 ### Graphics
@@ -88,7 +90,7 @@ Mouse sensitivity and Y inversion are in the options.
 - The HUD still shows Xbox pad glyphs while playing with keyboard and mouse.
 - Texture pop-in during play.
 - Save import is new; back up unusual save folders before importing.
-- This is a preview: not every Xbox feature has been exercised.
+- Not every Xbox feature has been exercised.
 
 ## Building
 

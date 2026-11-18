@@ -169,7 +169,13 @@ void Display(Settings& s, bool live) {
             if (ImGui::Selectable(c.label, c.value == s.fps_cap)) s.fps_cap = c.value;
         ImGui::EndCombo();
     }
-    ImGui::TextDisabled("This game renders at about 30 fps on its own; the cap can only lower it, not raise it.");
+    if (s.experimental_60fps)
+        ImGui::TextDisabled("Experimental mode skips the game's 30 Hz wait and fixes the rate at 60 fps.");
+    else
+        ImGui::TextDisabled("This game renders at about 30 fps on its own; the cap can only lower it, not raise it.");
+    ImGui::Checkbox("Experimental: 60 fps mode", &s.experimental_60fps);
+    ImGui::TextWrapped("Skips the guest's 30 Hz vblank wait and ignores the frame rate above while enabled. Off by "
+                       "default; higher rates accelerate the game's animations, so this mode is capped at 60.");
     ImGui::Spacing();
     ImGui::Checkbox("V-Sync", &s.vsync);
     ImGui::Checkbox("Show the frame rate", &s.show_fps);

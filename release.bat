@@ -28,6 +28,7 @@ copy /y README.md "%STAGE%\" >nul
 copy /y docs\controls.md "%STAGE%\docs\" >nul
 copy /y docs\debugging.md "%STAGE%\docs\" >nul
 copy /y docs\white-ui-panels.md "%STAGE%\docs\" >nul
+copy /y docs\experimental-fps.md "%STAGE%\docs\" >nul
 copy /y "%SDK%\THIRD_PARTY.txt" "%STAGE%\" >nul
 for %%f in (msvcp140 vcruntime140 vcruntime140_1) do copy /y "%VCRUNTIME%\%%f.dll" "%STAGE%\" >nul
 rem the bundled compiler without its work folder: no game code goes in the archive, the first start builds it

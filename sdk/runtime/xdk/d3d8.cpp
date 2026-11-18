@@ -533,7 +533,10 @@ HLE_STDCALL(D3D_MakeRequestedSpace, 2) {
 }
 
 HLE_STDCALL(D3DDevice_BlockUntilVerticalBlank, 0) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    // The title waits here every frame, and 16 ms of sleep plus the host's cap is what holds it near 30 fps.
+    // The experimental 60 fps mode skips that wait; app::Pace() in D3DDevice_Swap then applies the fixed
+    // 60 fps cap. Higher rates accelerate the guest's animations, so no uncapped mode is offered.
+    if (!app::Get().experimental_60fps) std::this_thread::sleep_for(std::chrono::milliseconds(16));
     return 0;
 }
 // (status): D3DRASTER_STATUS {InVBlank, ScanLine} on a 60 Hz frame clock. The library reads the GPU's scanline,

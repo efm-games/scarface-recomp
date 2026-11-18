@@ -254,6 +254,7 @@ void Pace() {
     using clock = std::chrono::steady_clock;
     static clock::time_point next = clock::now();
     uint32_t cap = Get().fps_cap;
+    if (Get().experimental_60fps) cap = kExperimentalFps;
     if (cap == kFpsCapRefresh) cap = RefreshRate();
     auto now = clock::now();
     if (!cap) {
