@@ -116,7 +116,7 @@ bool CaptureOn() {
 }
 
 const char* kBlitHlsl = R"(
-cbuffer B : register(b1) { float4 uvrect; float4 opts; };
+cbuffer B : register(b1) { float4 uvrect; float4 opts; float4 aa; };
 Texture2D img : register(t0);
 Texture2D lut : register(t1);
 SamplerState ls : register(s0);
@@ -129,16 +129,47 @@ O vs(uint id : SV_VertexID) {
     o.uv = uvrect.xy + t * uvrect.zw;
     return o;
 }
-float4 psmain(O i) : SV_Target {
+// one output pixel, box filtered when the game is rendered below the output size
+float4 fetch(float2 uv, float2 px, int n) {
     float4 c = 0;
-    int n = max((int)opts.z, 1);
-    float2 px = fwidth(i.uv);
     for (int y = 0; y < n; y++)
-        for (int x = 0; x < n; x++) c += img.SampleLevel(ls, i.uv + px * ((float2(x, y) + 0.5) / n - 0.5), 0);
+        for (int x = 0; x < n; x++) c += img.SampleLevel(ls, uv + px * ((float2(x, y) + 0.5) / n - 0.5), 0);
     c /= n * n;
     c.rgb *= opts.w;
     if (opts.x > 0) c.rgb = float3(lut.Sample(ps, float2(c.r, 0.5)).r, lut.Sample(ps, float2(c.g, 0.5)).g, lut.Sample(ps, float2(c.b, 0.5)).b);
     return float4(c.rgb, opts.y > 0 ? c.a : 1);
+}
+float4 psmain(O i) : SV_Target {
+    float2 px = fwidth(i.uv);
+    int n = max((int)opts.z, 1);
+    float4 c = fetch(i.uv, px, n);
+    // FXAA 3.11 quality core, after gamma correction: the luma dot approximates perceptual luma on the LDR image
+    if (aa.x > 0) {
+        const float3 luma = float3(0.299, 0.587, 0.114);
+        float4 nw = fetch(i.uv + float2(-1, -1) * px, px, n);
+        float4 ne = fetch(i.uv + float2( 1, -1) * px, px, n);
+        float4 sw = fetch(i.uv + float2(-1,  1) * px, px, n);
+        float4 se = fetch(i.uv + float2( 1,  1) * px, px, n);
+        float lm = dot(c.rgb, luma);
+        float ln = dot(nw.rgb, luma);
+        float le = dot(ne.rgb, luma);
+        float lsw = dot(sw.rgb, luma);
+        float lse = dot(se.rgb, luma);
+        float lo = min(lm, min(min(ln, le), min(lsw, lse)));
+        float hi = max(lm, max(max(ln, le), max(lsw, lse)));
+        if (hi - lo >= max(1.0 / 12.0, hi * 0.125)) {
+            float2 dir = float2(-((ln + le) - (lsw + lse)), ((ln + lsw) - (le + lse)));
+            float reduce = max((ln + le + lsw + lse) * (0.25 * 0.125), 1.0 / 128.0);
+            dir = clamp(dir / (min(abs(dir.x), abs(dir.y)) + reduce), -8.0, 8.0) * px;
+            float3 a = 0.5 * (fetch(i.uv + dir * (1.0 / 3.0 - 0.5), px, n).rgb +
+                              fetch(i.uv + dir * (2.0 / 3.0 - 0.5), px, n).rgb);
+            float3 b = a * 0.5 + 0.25 * (fetch(i.uv - dir * 0.5, px, n).rgb +
+                                         fetch(i.uv + dir * 0.5, px, n).rgb);
+            float lb = dot(b, luma);
+            c.rgb = lb < lo || lb > hi ? a : b;
+        }
+    }
+    return c;
 }
 )";
 
@@ -389,6 +420,7 @@ struct BlitOptions {
     float mul = 1;            // colour scale
     DXGI_FORMAT rtv = kBgra;  // the target's format
     bool over = false;        // premultiplied over the target, which keeps its alpha
+    bool fxaa = false;        // FXAA on the final image, after gamma correction
 };
 
 // Shrink's settings past the source and the size
@@ -1420,8 +1452,9 @@ void D3D12Backend::Blit(ID3D12Resource* src, DXGI_FORMAT fmt, const float uvrect
     dev_->CreateShaderResourceView(lut_.Get(), &sv, Cpu(srv_heap_.Get(), slot + 1, srv_inc_));
     uint32_t si = EnsureBlitSamplers();
     Alloc cb = Upload(256, 256);
-    float c[8] = {uvrect[0], uvrect[1], uvrect[2], uvrect[3],
-                  o.gamma ? 1.0f : 0.0f, o.alpha ? 1.0f : 0.0f, float(o.taps), o.mul};
+    float c[12] = {uvrect[0], uvrect[1], uvrect[2], uvrect[3],
+                   o.gamma ? 1.0f : 0.0f, o.alpha ? 1.0f : 0.0f, float(o.taps), o.mul,
+                   o.fxaa ? 1.0f : 0.0f, 0, 0, 0};
     std::memcpy(cb.cpu, c, sizeof(c));
     DrawFullScreen(EnsureBlitPipeline(o.rtv, o.over), cb.gpu, slot, si);
 }
@@ -3313,7 +3346,8 @@ void D3D12Backend::BlitFrame(Target& t) {
     cl_->RSSetScissorRects(1, &scissor);
     binds_ = {};
     Transition(t.res.Get(), t.state, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    Blit(t.res.Get(), t.fmt, uv, {.gamma = gamma_});
+    Blit(t.res.Get(), t.fmt, uv, {.gamma = gamma_,
+                                  .fxaa = app::Get().antialiasing == app::AntiAliasing::Fxaa});
 }
 
 void D3D12Backend::RenderUi() {

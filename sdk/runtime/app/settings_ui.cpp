@@ -142,6 +142,12 @@ void Display(Settings& s, bool live) {
     ImGui::TextDisabled("The 3D image is drawn at this percentage of the output height.");
     ImGui::Spacing();
 
+    const char* aa[] = {"Off", "FXAA"};
+    int aa_index = int(s.antialiasing);
+    if (ImGui::Combo("Antialiasing", &aa_index, aa, 2)) s.antialiasing = AntiAliasing(aa_index);
+    ImGui::TextDisabled("FXAA smooths jagged edges in the final image after gamma correction.");
+    ImGui::Spacing();
+
     struct Cap {
         uint32_t value;
         const char* label;
@@ -162,6 +168,7 @@ void Display(Settings& s, bool live) {
             if (ImGui::Selectable(c.label, c.value == s.fps_cap)) s.fps_cap = c.value;
         ImGui::EndCombo();
     }
+    ImGui::TextDisabled("This game renders at about 30 fps on its own; the cap can only lower it, not raise it.");
     ImGui::Spacing();
     ImGui::Checkbox("V-Sync", &s.vsync);
     ImGui::Checkbox("Show the frame rate", &s.show_fps);

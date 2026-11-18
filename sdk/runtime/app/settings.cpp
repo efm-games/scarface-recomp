@@ -23,6 +23,7 @@ namespace app {
 namespace {
 
 const char* kModes[] = {"fullscreen", "borderless", "windowed"};
+const char* kAntialiasing[] = {"off", "fxaa"};
 
 std::filesystem::path File() { return ExeDir() / kGame.settings; }
 
@@ -48,6 +49,9 @@ void Load() {
     s.height = t["height"].value_or(s.height);
     s.render_percent = t["render_percent"].value_or(s.render_percent);
     s.fps_cap = t["fps_cap"].value_or(s.fps_cap);
+    std::string aa = t["antialiasing"].value_or(std::string(kAntialiasing[uint32_t(s.antialiasing)]));
+    for (uint32_t i = 0; i < 2; i++)
+        if (aa == kAntialiasing[i]) s.antialiasing = AntiAliasing(i);
     s.vsync = t["vsync"].value_or(s.vsync);
     s.aniso = t["anisotropic_filtering"].value_or(s.aniso);
     s.custom_textures = t["custom_textures"].value_or(s.custom_textures);
@@ -74,6 +78,7 @@ toml::table Table() {
                   {"height", int64_t(s.height)},
                   {"render_percent", int64_t(s.render_percent)},
                   {"fps_cap", int64_t(s.fps_cap)},
+                  {"antialiasing", kAntialiasing[uint32_t(s.antialiasing)]},
                   {"vsync", s.vsync},
                   {"anisotropic_filtering", int64_t(s.aniso)},
                   {"custom_textures", s.custom_textures},

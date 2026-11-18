@@ -60,7 +60,7 @@ Mouse sensitivity and Y inversion are in the options.
 ## Features
 
 ### Display
-- Windowed, borderless and fullscreen modes, resolution choice, internal render scale, anisotropic filtering, FPS cap, vsync and an optional FPS counter, from the launcher, the F1 overlay or `settings.toml`.
+- Windowed, borderless and fullscreen modes, resolution choice, internal render scale, anisotropic filtering, optional FXAA antialiasing, FPS cap, vsync and an optional FPS counter, from the launcher, the F1 overlay or `settings.toml`.
 - Widescreen output.
 
 ### Graphics
