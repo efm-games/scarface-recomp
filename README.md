@@ -9,11 +9,11 @@ The game's x86 code is statically recompiled ahead of time and the Xbox kernel/X
 
 ## Playable preview
 
-This is the first public preview (`v0.1.0`). The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a keyboard and mouse or a gamepad. Expect rough edges; see [Known issues](#known-issues).
+This is a public preview (`v0.1.1`). The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a keyboard and mouse or a gamepad. Expect rough edges; see [Known issues](#known-issues).
 
 ## Installation
 
-1. Download `Scarface-v0.1.0-preview.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
+1. Download `Scarface-v0.1.1-preview.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
 2. Run `Scarface.exe`.
 3. Click **Browse for the disc image...** and pick your Xbox `.iso`/`.xiso` (a whole-disc dump also works), or **Use an extracted folder...** and pick the folder that holds `default.xbe`. The launcher remembers the path.
 4. Click **Play**. The first start compiles the game's code for your PC once with the bundled recompiler and Clang; it takes a few minutes and about 1 GB of free disk space. Every later start goes straight into the game.
@@ -76,7 +76,6 @@ Mouse sensitivity and Y inversion are in the options.
 
 ## Known issues
 
-- The pause menu occasionally draws a white backdrop instead of the intended red one, which makes the text hard to read.
 - The HUD still shows Xbox pad glyphs while playing with keyboard and mouse.
 - Texture pop-in during play.
 - Save import is new; back up unusual save folders before importing.

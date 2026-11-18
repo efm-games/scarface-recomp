@@ -685,6 +685,14 @@ PixelKey MakePixelKey(const State& s, const TexInfo tex[4]) {
             }
             break;
         }
+        if (i == 0 && tex[0].kind && t[kTssColorOp] == kTopSelectArg1 && (t[kTssColorArg1] & 0xF) == kTaTexture) {
+            // the UI atlases are white shapes with the tint in the vertex colour.  Some menus select the texture
+            // directly (ColorOp=SELECTARG1, arg1=TEXTURE) while others leave stage 0 disabled; both need the same
+            // MODULATE with the diffuse tint or the panels draw as solid white rectangles.  Later stages still run.
+            k.ff[0][0] = 4;  // D3DTOP_MODULATE
+            k.ff[0][1] = kTaCurrent;
+            k.ff[0][2] = kTaTexture;
+        }
     }
     return k;
 }

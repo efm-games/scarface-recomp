@@ -390,11 +390,6 @@ void Pad(int port, input::Pad& pad) {
         if (maps.menu) analog[kB] = 0xFF;
         else buttons |= kStart;
     }
-    // TEMP pause test: Start only
-    if (Held(VK_F9)) buttons |= kStart;
-    // TEMP menu test: B alone, which closes the profile dialog and backs out of menus
-    if (Held(VK_F8)) analog[kB] = 0xFF;
-
     // Menus: Enter is Select (A)
     if (Held(VK_RETURN)) analog[kA] = 0xFF;
 
