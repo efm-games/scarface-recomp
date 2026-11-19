@@ -1,5 +1,7 @@
 # Scarface: The World Is Yours — XBE Recomp
 
+<a href="https://recomplauncher.com/game/scarface-recomp"><picture><source media="(prefers-color-scheme: dark)" srcset="https://recomplauncher.com/assets/press/launcher/badge-light.svg"><img alt="Get it on RecompLauncher" src="https://recomplauncher.com/assets/press/launcher/badge-dark.svg" height="48"></picture></a>
+
 An unofficial native 64-bit Windows port of the original Xbox version of *Scarface: The World Is Yours*, built with the [Xbox XBE Recomp](https://github.com/TGP482/XboxXBE-Recomp) tool.
 
 The game's x86 code is statically recompiled ahead of time and the Xbox kernel/XDK APIs are implemented natively on Windows (Direct3D 12 renderer, XAudio2 audio). The result runs from the user's own copy of the Xbox game.
@@ -12,7 +14,11 @@ The game's x86 code is statically recompiled ahead of time and the Xbox kernel/X
 
 ## Release
 
-This is the `v1.2.0` release. The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a keyboard and mouse or a gamepad. See [Known issues](#known-issues) for the remaining rough edges.
+This is the `v1.2.1` release. The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a keyboard and mouse or a gamepad. See [Known issues](#known-issues) for the remaining rough edges.
+
+### What's new in v1.2.1
+
+- Added [RecompLauncher](https://recomplauncher.com/game/scarface-recomp) support. The archive now ships a `recomplauncher.json` manifest, so the launcher can set up your own copy of the game, show display and control settings on the game's page, and start the recomp directly. Playing without the launcher is unchanged.
 
 ### What's new in v1.2.0
 
@@ -22,10 +28,12 @@ Earlier work is described in the v1.1.1 release notes (PC/PS2 save conversion an
 
 ## Installation
 
-1. Download `Scarface-v1.2.0.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
+1. Download `Scarface-v1.2.1-Windows-x64.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
 2. Run `Scarface.exe`.
 3. Click **Browse for the disc image...** and pick your Xbox `.iso`/`.xiso` (a whole-disc dump also works), or **Use an extracted folder...** and pick the folder that holds `default.xbe`. The launcher remembers the path.
 4. Click **Play (A)** or press gamepad **A**. The first start compiles the game's code for your PC once with the bundled recompiler and Clang; it takes a few minutes and about 1 GB of free disk space. Every later start goes straight into the game.
+
+With [RecompLauncher](https://recomplauncher.com/game/scarface-recomp), the setup screen handles the copy selection and first start: add your disc image or folder on the game's page and press Play. Settings are available there too.
 
 The executable checks the game's `default.xbe` SHA-1 (`9367786d1b3bc9b35208a29a7ddca29487af0f5d`). If your image is a different release, the launcher warns you and lets you try it anyway.
 
@@ -109,7 +117,7 @@ Put the Xbox version's `default.xbe` in `assets` with its data folders beside it
 ### 3. Build
 Run `build.bat`. The first build recompiles the game and takes a while; the executable is written to `out\build\release`.
 
-`release.bat` builds the same executable and packages a release archive (executable, empty `assets` folder, compiler, runtime DLLs, this README and the controls page) using Windows' built-in `tar`.
+`release.bat` builds the same executable and packages a release archive (executable, empty `assets` folder, compiler, runtime DLLs, this README, `recomplauncher.json` and the controls page) using Windows' built-in `tar`.
 
 The XBE used for the build must be the same release as the one in the image you run: the executable checks its SHA-1.
 

@@ -25,6 +25,7 @@ rd /s /q "%STAGE%" 2>nul
 mkdir "%STAGE%\assets" "%STAGE%\docs"
 copy /y "%OUT%\%GAME_EXE%.exe" "%STAGE%\" >nul
 copy /y README.md "%STAGE%\" >nul
+copy /y recomplauncher.json "%STAGE%\" >nul
 copy /y docs\controls.md "%STAGE%\docs\" >nul
 copy /y docs\debugging.md "%STAGE%\docs\" >nul
 copy /y docs\white-ui-panels.md "%STAGE%\docs\" >nul
