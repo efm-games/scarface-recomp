@@ -12,18 +12,17 @@ The game's x86 code is statically recompiled ahead of time and the Xbox kernel/X
 
 ## Release
 
-This is the `v1.1.1` release. The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a keyboard and mouse or a gamepad. See [Known issues](#known-issues) for the remaining rough edges.
+This is the `v1.2.0` release. The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a keyboard and mouse or a gamepad. See [Known issues](#known-issues) for the remaining rough edges.
 
-### What's new in v1.1.1
+### What's new in v1.2.0
 
-- The save manager can convert **PC and PS2 saves** into Xbox-format profiles, from the Saves tab or with `--import-save <folder|save file> [--save-slot 1|2|3]`. Existing Xbox saves stay untouched unless you select their slot.
-- Fixed the look tutorial's first-load prompts so **Enter** reads `[Enter] Options and Profiles` and **Esc** reads `[Esc] Exit Tutorial` immediately, without a menu round-trip. Dialog `[CLOSE]` also uses Esc/B consistently.
+- Fixed the first-mission lighting/texture flash at Tony's mansion. The world now keeps its normal diffuse lighting during the effect instead of drawing the raw unlit texture. The diagnosis and fix are in [docs/PROJECT-NOTES.md](docs/PROJECT-NOTES.md).
 
-The earlier HUD key-prompt and input work is described in [docs/hud-glyphs-hotkeys.md](docs/hud-glyphs-hotkeys.md).
+Earlier work is described in the v1.1.1 release notes (PC/PS2 save conversion and tutorial prompts) and [docs/hud-glyphs-hotkeys.md](docs/hud-glyphs-hotkeys.md) (HUD key prompts).
 
 ## Installation
 
-1. Download `Scarface-v1.1.1.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
+1. Download `Scarface-v1.2.0.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
 2. Run `Scarface.exe`.
 3. Click **Browse for the disc image...** and pick your Xbox `.iso`/`.xiso` (a whole-disc dump also works), or **Use an extracted folder...** and pick the folder that holds `default.xbe`. The launcher remembers the path.
 4. Click **Play (A)** or press gamepad **A**. The first start compiles the game's code for your PC once with the bundled recompiler and Clang; it takes a few minutes and about 1 GB of free disk space. Every later start goes straight into the game.

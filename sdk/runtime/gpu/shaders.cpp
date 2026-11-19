@@ -699,6 +699,16 @@ PixelKey MakePixelKey(const State& s, const TexInfo tex[4]) {
             k.ff[0][5] = kTaCurrent;
             k.ff[0][6] = kTaTexture;
         }
+        if (i == 0 && tex[0].kind && t[kTssColorOp] == kTopSelectArg2 && (t[kTssColorArg1] & 0xF) == kTaCurrent &&
+            (t[kTssColorArg2] & 0xF) == kTaTexture) {
+            // the first-mission flash leaves stage 0 selecting arg2 (the texture) instead of the disabled combiner
+            // the same world draws use in every other frame.  Selecting the texture alone drops the vertex diffuse,
+            // which is where the console keeps the lighting, and paints the whole scene far too bright.  Modulate
+            // with the diffuse exactly as the disabled-stage path above does so the flash keeps normal lighting.
+            k.ff[0][0] = 4;  // D3DTOP_MODULATE
+            k.ff[0][1] = kTaCurrent;
+            k.ff[0][2] = kTaTexture;
+        }
     }
     return k;
 }

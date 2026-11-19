@@ -1,16 +1,26 @@
 # Project notes
 
-Background notes that are not a work queue. `v1.1.1` is the current release; after the remaining graphics defect is
-resolved the project is considered definitive, and further work is limited to bug fixes.
+Background notes that are not a work queue. `v1.2.0` is the current release; with the graphics defect below resolved
+the project is considered definitive, and further work is limited to bug fixes.
 
 ## First-mission lighting/texture flash
 
 A flash was reported in the first mission at Tony's mansion. The player's captures `20261118_232001_827.bmp` (bright)
 and `20261118_232002_978.bmp` (the same view looking normal a second later) show the same scene. The bright frame has
 mean RGB `[103.5, 85.5, 64.0]`, the normal frame `[30.6, 22.4, 14.9]`, and the full-frame difference mean is
-`[77.1, 66.5, 51.8]`. Their draw histories show the bright frame drawing the world with texture factors sweeping
-through `B6...` to `CE...`, while the normal frame holds `FE000000`. Moving Tony can bring the steady value back. This
-looks like a scene-tint state leaking into world draws, not a missing texture. This is the current focus.
+`[77.1, 66.5, 51.8]`.
+
+The F2 draw histories isolate the cause. The bright frame draws the world with stage 0 set to `SELECTARG2` and
+`arg2 = TEXTURE` (`c3/1,1,2`), which selects the raw texture and drops the vertex diffuse that carries the console's
+lighting. Every fixed-function `c3` draw in that frame has no pixel shader and a texture factor sweeping `B4...` to
+`F7...`. The normal frame draws the same geometry with stage 0 disabled (`c1/1,1,2`, texture factor `FE000000`), which
+the renderer already turns into `MODULATE(diffuse, texture)`. The other ten captured frames have no fixed-function
+`c3` draws at all, so the pattern is unique to the flash. Moving Tony returns the state to the steady `c1` path.
+
+The fix is in `MakePixelKey()` in `sdk/runtime/gpu/shaders.cpp`: stage 0 with a bound texture, `ColorOp = SELECTARG2`,
+`arg1 = CURRENT` and `arg2 = TEXTURE` is now rewritten to `MODULATE(CURRENT, TEXTURE)`, exactly like the existing
+disabled-stage and white-UI-panel rules. The sweep itself is not applied by those draws, so it does not need changing;
+only the combiner that discarded the lighting did.
 
 ## Declined: DLSS 5
 
