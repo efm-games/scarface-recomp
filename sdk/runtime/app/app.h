@@ -153,9 +153,10 @@ void ToggleOverlay();  // any thread; the window thread's F1 calls this
 
 namespace saves {
 
-// the Saves tab (saves.cpp): list E:\UDATA\<title id>, import an original Xbox save folder, delete, open in Explorer
+// the Saves tab (saves.cpp): list E:\UDATA\<title id>, import an Xbox save or convert a PC/PS2 save, delete, open
 void Ui();
-// --import-save <folder> on the command line, before the launcher; true when one was asked for
+// --import-save <folder|save file> [--save-slot 1|2|3] before the launcher; folders of Xbox saves are copied,
+// PC/PS2 saves are converted. --save-slot applies only to conversion (0 or omitted picks the first free profile).
 bool CommandLine();
 bool ImportFromFolder(const std::string& path, std::string& status);
 

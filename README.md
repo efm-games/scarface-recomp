@@ -77,13 +77,13 @@ Mouse sensitivity X and Y are separate options, along with Y inversion. The old 
 ### Controller and keyboard/mouse
 - Xbox, PlayStation and Switch controllers through SDL3, with hot plugging and rumble.
 - Keyboard and mouse support following the official PC manual, with automatic on-foot/vehicle bindings.
-- Optional HUD key prompts replace pad glyphs with plain-text key labels while keyboard/mouse is active (or before any input). Line-specific rules follow the PC manual: Start/Load/Accept/Cover and dialog `[CLOSE]` are `[Enter]`, sprint is `[Shift]`, cancel/back/create are `[Esc]`, taunt is `[T]`, rage is `[V]` and pick up/interact is `[E]`. Plain triangle/Y captions get an `[E] ` prefix; the tape-player glyph before `PLAY`/`STOP` is replaced by `[T] `, and the Shuffle caption becomes `[Enter] SHUFFLE ON/OFF` (the original "TURN" wording is kept for gamepad prompts). Outside the music library, the original glyphs return as soon as a controller is used. The music library snapshots the active input when its page opens and keeps that style until you leave.
+- Optional HUD key prompts replace pad glyphs with plain-text key labels while keyboard/mouse is active (or before any input). Line-specific rules follow the PC manual: Start/Load/Accept/Cover are `[Enter]`, dialog `[CLOSE]` and cancel/back/create are `[Esc]`, sprint is `[Shift]`, taunt is `[T]`, rage is `[V]` and pick up/interact is `[E]`. Plain triangle/Y captions get an `[E] ` prefix; the tape-player glyph before `PLAY`/`STOP` is replaced by `[T] `, and the Shuffle caption becomes `[Enter] SHUFFLE ON/OFF` (the original "TURN" wording is kept for gamepad prompts). Outside the music library, the original glyphs return as soon as a controller is used. The music library snapshots the active input when its page opens and keeps that style until you leave.
 - Optional GTA-style gamepad preset (RT accelerate, LT brake), off by default.
 
 ### Launcher, options and saves
 - Launcher with a disc image picker, an extracted-folder picker, display/input options, the intro-skip toggle and an **Unlock all cheats** option that makes every pause-menu cheat code selectable from a new game (effects are still chosen manually). Gamepad **A** activates the **Play (A)** button just like the ready screen's Start (A) button.
 - In-game options overlay (**F1**) covering display, controls, advanced rendering and game settings.
-- Save manager that keeps the game's Xbox-format saves in `hdd\E\UDATA\5655003F` beside the executable and can import an Xbox save folder.
+- Save manager that keeps the game's Xbox-format saves in `hdd\E\UDATA\5655003F` beside the executable, imports Xbox save folders, and converts PC or PS2 saves into a free or chosen Xbox profile.
 - Screenshots with **F2**, saved as BMP files in `screenshots` beside the executable.
 - Optional intro skip (off by default), crash dumps and log files.
 - Frame and state captures with **F2**/**F3** and the debug variables in [docs/debugging.md](docs/debugging.md).
@@ -93,7 +93,7 @@ Mouse sensitivity X and Y are separate options, along with Y inversion. The old 
 ## Known issues
 
 - Texture pop-in during play.
-- Save import is new; back up unusual save folders before importing.
+- Save import and conversion are new; keep an Xbox profile as the template and back up unusual save folders before importing or converting.
 - Not every Xbox feature has been exercised.
 
 ## Building

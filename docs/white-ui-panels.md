@@ -55,5 +55,5 @@ the shader key, so it applies to every draw that uses the same texture-stage sta
 ## History
 
 - `v0.1.1` (`5a042fa`): added the colour modulation for the `SELECTARG1/TEXTURE` case and removed the temporary
-  F8/F9 debug bindings used while investigating. The "white backdrop" known issue was dropped from the README.
+  debug bindings used while investigating. The "white backdrop" known issue was dropped from the README.
 - `v0.2.0` (`5508395`): added the matching alpha modulation, fixing translucent ammo and pause panes.

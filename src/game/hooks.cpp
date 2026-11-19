@@ -28,6 +28,7 @@ X86_EXTERN_FUNC(__imp__sub_002492A0);
 X86_EXTERN_FUNC(__imp__sub_00249300);
 X86_EXTERN_FUNC(__imp__sub_00240570);
 X86_EXTERN_FUNC(__imp__sub_00099BC0);
+X86_EXTERN_FUNC(sub_0006FB50);  // guest script evaluator, called only for queued diagnostic commands
 
 namespace hud_prompts {
 
@@ -151,9 +152,16 @@ KeyPrompt kAcceptPrompt = {"BUTTON_GRAPHIC_X", {u"[Enter]", u"[Enter]", u"[Enter
 KeyPrompt kCancelXPrompt = {"BUTTON_GRAPHIC_X", {u"[Esc]", u"[Esc]", u"[Esc]"}};
 KeyPrompt kRagePrompt = {"BUTTON_GRAPHIC_CIRCLE", {u"[V]", u"[V]", u"[V]"}};
 KeyPrompt kTauntPrompt = {"BUTTON_GRAPHIC_CIRCLE", {u"[T]", u"[T]", u"[T]"}};
-KeyPrompt kClosePrompt = {"BUTTON_GRAPHIC_CIRCLE", {u"[Enter]", u"[Enter]", u"[Enter]"}};
+KeyPrompt kClosePrompt = {"BUTTON_GRAPHIC_CIRCLE", {u"[Esc]", u"[Esc]", u"[Esc]"}};
 KeyPrompt kCancelPrompt = {"BUTTON_GRAPHIC_CIRCLE", {u"[Esc]", u"[Esc]", u"[Esc]"}};
 KeyPrompt kPickupPrompt = {"BUTTON_GRAPHIC_TRIANGLE", {u"[E]", u"[E]", u"[E]"}};
+// The look tutorial is the one screen where the pad's Start opens Options and Profiles and B exits. The line-level
+// rules below pick these even when the game reuses the generic Start/Circle glyph tokens on that page.
+KeyPrompt kLookTutorialStartPrompt = {"BUTTON_GRAPHIC_START",
+                                      {u"[Enter] Options and Profiles", u"[Enter] Options and Profiles",
+                                       u"[Enter] Options and Profiles"}};
+KeyPrompt kLookTutorialExitPrompt = {"BUTTON_GRAPHIC_CIRCLE",
+                                     {u"[Esc] Exit Tutorial", u"[Esc] Exit Tutorial", u"[Esc] Exit Tutorial"}};
 
 // The expander sets this before it calls the token dispatcher and restores it afterwards.
 thread_local uint32_t g_source_line = 0;
@@ -232,6 +240,57 @@ uint32_t CopyWideSource(uint8_t* mem_base, uint32_t wide) {
     return base + slot * kSourceSlot;
 }
 
+// Opt-in diagnostic commands need a guest address for the script text and a guest thread to run on. Reuse a small
+// scratch page and the text-expansion hook below; the page is only written by the hook that is about to consume it.
+constexpr uint32_t kDiagnosticCommandPage = 0x1000;
+uint32_t g_diagnostic_command_base = 0;
+
+uint32_t DiagnosticCommandPage() {
+    if (g_diagnostic_command_base) return g_diagnostic_command_base;
+    uint32_t va = 0, size = kDiagnosticCommandPage;
+    if (mem::AllocateVirtual(va, size, mem::kMemCommit | mem::kMemReserve, 4) != 0 || va == 0) return 0;
+    g_diagnostic_command_base = va;
+    return va;
+}
+
+// sub_0006FB50 takes (script_string, object) on the guest stack and returns a script object in EAX. Passing 0 as the
+// object is what the debug menu's "Save Game To Profile N" entries do. Save every register and flag afterwards: this
+// call is an injected side effect, not part of the guest function we interrupted.
+void RunDiagnosticScriptCommand(X86Context& ctx, uint8_t* base) {
+    if (!kbm::DiagnosticCommandsEnabled()) return;
+    char command[256];
+    if (!kbm::TakeDiagnosticCommand(command)) return;
+    if (!base) {
+        LOGE("diagnostic: no guest memory for script command '%s'", command);
+        return;
+    }
+    uint32_t page = DiagnosticCommandPage();
+    size_t length = std::strlen(command) + 1;  // TakeDiagnosticCommand guarantees the buffer is terminated
+    if (!page || length > kDiagnosticCommandPage) {
+        LOGE("diagnostic: no scratch page for script command '%s'", command);
+        return;
+    }
+    std::memcpy(base + page, command, length);
+
+    X86Context saved = ctx;
+    X86_PUSH32(0);             // object argument; debug save entries use 0
+    X86_PUSH32(page);          // narrow script string
+    X86_PUSH32(0x6FB50u);      // return address consumed by the guest ret
+    sub_0006FB50(ctx, base);
+    ctx = saved;
+    LOGI("diagnostic: executed script command '%s'", command);
+}
+
+// The second expansion pass parses our own bracketed labels ("[Enter] ...", "[Esc] ...") as tokens again. Never feed
+// those back into the line rules: a tutorial line containing "options and profiles" would otherwise relabel the Esc
+// token as the Start prompt, and vice versa.
+bool IsInjectedLabelToken(uint8_t* mem_base, uint32_t token) {
+    static const char* const labels[] = {"Enter", "Esc", "Shift", "Mouse", "Space", "WASD", "A/D", "T", "V", "E"};
+    for (const char* label : labels)
+        if (TokenEquals(mem_base, token, label)) return true;
+    return false;
+}
+
 // The expander receives the complete narrow source line. A bounded scan is enough to classify the few lines where a
 // pad token needs a label that context alone cannot choose.
 bool SourceContains(uint8_t* mem_base, uint32_t src, const char* needle, bool insensitive = false) {
@@ -257,8 +316,24 @@ bool SourceContains(uint8_t* mem_base, uint32_t src, const char* needle, bool in
 // menu map yet, and a tutorial notice can leave a dialog map on top, so context alone produced [Shift] on "start" and
 // [Enter] on "sprint". The line is authoritative for these well-known strings.
 KeyPrompt* OverrideForToken(uint8_t* mem_base, uint32_t src, uint32_t token) {
-    if (!mem_base || !src || !token) return nullptr;
+    if (!mem_base || !token || IsInjectedLabelToken(mem_base, token)) return nullptr;
     auto has = [&](const char* text) { return SourceContains(mem_base, src, text, true); };
+
+    // The tutorial can hand the generic Start/B glyph tokens to the dispatcher without a source line. Its ActionMap
+    // is the only surviving clue there, so use it instead of the generic "[Esc]" Start label.
+    if (!src && kbm::LookTutorialActive()) {
+        if (TokenEquals(mem_base, token, "BUTTON_GRAPHIC_START") || TokenEquals(mem_base, token, "LOOK_TUTORIAL_START"))
+            return &kLookTutorialStartPrompt;
+        if (TokenEquals(mem_base, token, "BUTTON_GRAPHIC_CIRCLE") || TokenEquals(mem_base, token, "LOOK_TUTORIAL_EXIT"))
+            return &kLookTutorialExitPrompt;
+    }
+    if (!src) return nullptr;  // without a line, the remaining rules have no words to classify
+
+    // Look tutorial captions use the generic Start/B glyphs. Match the sentence first so the top and bottom prompts
+    // cannot both collapse to the generic "[Esc] Exit Tutorial" label.
+    if (has("[look_tutorial_start]") || has("options and profiles")) return &kLookTutorialStartPrompt;
+    if (has("[look_tutorial_exit]") || has("exit tutorial")) return &kLookTutorialExitPrompt;
+
     bool x = TokenEquals(mem_base, token, "BUTTON_GRAPHIC_X") || TokenEquals(mem_base, token, "A");
     bool circle = TokenEquals(mem_base, token, "BUTTON_GRAPHIC_CIRCLE") || TokenEquals(mem_base, token, "B");
     bool triangle = TokenEquals(mem_base, token, "BUTTON_GRAPHIC_TRIANGLE") || TokenEquals(mem_base, token, "Y");
@@ -272,7 +347,7 @@ KeyPrompt* OverrideForToken(uint8_t* mem_base, uint32_t src, uint32_t token) {
               has("cover"))) {
         return &kAcceptPrompt;
     }
-    // PC confirms dialogs with Enter, including the [CLOSE] caption on tutorial notices.
+    // The game's [CLOSE] action is pad B, which is Esc on the PC bindings even when the notice also has an A caption.
     if (x && has("[close]")) return &kClosePrompt;
     if (x && (has("[cancel]") || has("[back]"))) return &kCancelXPrompt;
 
@@ -1078,6 +1153,8 @@ bool NeedsAsciiInteractPrefix(uint8_t* mem_base, uint32_t src) {
 // UTF-16 sentence; this helper extracts each nested [TOKEN] from that sentence and calls the dispatcher directly.
 // Keeping the sentence available here is what lets sprint/start/pickup lines choose the right key label.
 X86_FUNC(sub_0024D9B0) {
+    RunDiagnosticScriptCommand(ctx, base);
+
     uint8_t* mem_base = mem::Base();
     uint32_t previous_line = g_source_line;
     uint32_t previous_depth = g_source_depth;

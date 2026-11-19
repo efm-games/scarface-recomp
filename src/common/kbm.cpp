@@ -17,8 +17,11 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <mutex>
+#include <string>
 
 #include <imgui.h>
 
@@ -38,6 +41,16 @@ uint32_t sensitivity_y = 100;  // percent of the base look speed
 bool modern_pad = false;
 bool hud_prompts = true;
 
+// Private diagnostic sessions only. This is deliberately not a settings option or a UI toggle: a normal player never
+// sees it, and it cannot be persisted in settings.toml. The environment variable must be exactly "1".
+bool DiagnosticCommandsEnabled() {
+    static const bool enabled = [] {
+        const char* value = std::getenv("XBE_DIAGNOSTIC_SESSION");
+        return value && std::strcmp(value, "1") == 0;
+    }();
+    return enabled;
+}
+
 namespace {
 
 // The pad report gets read from guest threads; the window thread writes it.
@@ -51,6 +64,16 @@ bool g_cursor_shown = true;
 bool g_escape_latched = false;  // one virtual Start/B press per physical Esc press
 void* g_hwnd = nullptr;  // the game window, for posting WM_SETCURSOR from the game thread
 std::atomic<Device> g_device{Device::None};
+
+// Diagnostic console: the window thread queues a command; a guest thread takes it and runs it through the game's own
+// script evaluator. A version counter avoids holding a lock on the hot guest path when no command is pending.
+std::atomic<bool> g_diagnostic_open{false};
+std::atomic<bool> g_diagnostic_focus{false};  // set by F8 on the window thread, consumed by the render thread
+std::mutex g_diagnostic_lock;
+uint32_t g_diagnostic_version = 0;
+std::atomic<uint32_t> g_diagnostic_queued{0};
+std::string g_diagnostic_command;
+char g_diagnostic_input[256] = "SGS_ActivateQueue(2,1);";
 
 // Right stick units per mouse pixel at 100%. A flick across the screen is a full deflection.
 constexpr int kBaseLook = 650;
@@ -113,9 +136,10 @@ bool KbmActive() {
 
 // What the game's ActionMap stack says about the screen it is on.
 struct ActionMaps {
-    bool vehicle = false;  // a driving map is on top: steering, not walking
-    bool menu = false;     // a front end map is on top: Esc backs out of a menu there, it does not pause
-    bool dialog = false;   // a system dialog is on top: Enter dismisses it, like the pad's B
+    bool vehicle = false;       // a driving map is on top: steering, not walking
+    bool menu = false;          // a front end map is on top: Esc backs out of a menu there, it does not pause
+    bool dialog = false;        // a system dialog is on top: Enter dismisses it, like the pad's B
+    bool look_tutorial = false; // the tutorial overlay remaps Enter to the pad's Start and Esc to B
 };
 
 // Reads the game's ActionMap stack.
@@ -156,6 +180,8 @@ ActionMaps ReadActionMaps() {
                 std::strncpy(top_name, name, sizeof(top_name) - 1);
             }
 
+            if (std::strstr(name, "HUDLookTutorialActionMap")) maps.look_tutorial = true;
+
             if (std::strstr(name, "WheeledVehicleActionMap") ||
                 std::strstr(name, "BoatActionMap") ||
                 std::strstr(name, "HelicopterActionMap") ||
@@ -185,8 +211,8 @@ ActionMaps ReadActionMaps() {
 
     if (top_name[0] != '\0' && std::strncmp(s_last_top, top_name, sizeof(s_last_top)) != 0) {
         std::strncpy(s_last_top, top_name, sizeof(s_last_top) - 1);
-        LOGI("kbm: top action map '%s' (in_vehicle=%d menu=%d dialog=%d)", s_last_top, maps.vehicle, maps.menu,
-             maps.dialog);
+        LOGI("kbm: top action map '%s' (in_vehicle=%d menu=%d dialog=%d look_tutorial=%d)", s_last_top, maps.vehicle,
+             maps.menu, maps.dialog, maps.look_tutorial);
     }
 
     return maps;
@@ -206,7 +232,7 @@ void WantCursor(bool show) {
 
 void UpdateCursor() {
     // the game owns the cursor while focused; the options overlay takes it back
-    bool overlay = app::OverlayOpen();
+    bool overlay = app::OverlayOpen() || DiagnosticCommandsOpen();
     if (!overlay && ImGui::GetCurrentContext()) overlay = ImGui::GetIO().WantCaptureMouse;
     WantCursor(!g_active || overlay);
 }
@@ -220,8 +246,99 @@ void ClearInput() {
 
 }  // namespace
 
+namespace {
+
+void QueueDiagnosticCommand(const char* command) {
+    if (!command || !*command) return;
+    std::lock_guard lock(g_diagnostic_lock);
+    g_diagnostic_command = command;
+    if (g_diagnostic_command.size() >= 256) g_diagnostic_command.resize(255);
+    ++g_diagnostic_version;
+    if (!g_diagnostic_version) ++g_diagnostic_version;  // 0 means none queued
+    g_diagnostic_queued.store(g_diagnostic_version, std::memory_order_release);
+}
+
+// A diagnostic harness can put the first command in this file instead of synthesizing text into the ImGui field. The
+// console still has to be opened and triggered with F8/F9, so nothing runs without an explicit in-game action.
+void LoadDiagnosticCommandFile() {
+    std::ifstream file(app::ExeDir() / "diagnostic_command.txt");
+    std::string line;
+    if (!std::getline(file, line)) return;
+    while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
+    if (line.empty()) return;
+    if (line.size() >= sizeof(g_diagnostic_input)) line.resize(sizeof(g_diagnostic_input) - 1);
+    {
+        std::lock_guard lock(g_diagnostic_lock);
+        std::memcpy(g_diagnostic_input, line.c_str(), line.size() + 1);
+    }
+    LOGI("diagnostic: initial command from diagnostic_command.txt: %s", line.c_str());
+}
+
+void ToggleDiagnosticCommands() {
+    bool open = g_diagnostic_open.load(std::memory_order_relaxed);
+    g_diagnostic_open.store(!open, std::memory_order_relaxed);
+    g_diagnostic_focus.store(!open, std::memory_order_relaxed);
+}
+
+}  // namespace
+
+bool DiagnosticCommandsOpen() { return g_diagnostic_open.load(std::memory_order_relaxed); }
+
+bool TakeDiagnosticCommand(char (&command)[256]) {
+    uint32_t version = g_diagnostic_queued.load(std::memory_order_acquire);
+    if (!version) return false;
+    std::lock_guard lock(g_diagnostic_lock);
+    if (version != g_diagnostic_queued.load(std::memory_order_relaxed)) {
+        // A newer command was queued between the atomic read and the lock; take that one on the next expansion.
+        return false;
+    }
+    if (g_diagnostic_command.empty() || g_diagnostic_command.size() >= sizeof(command)) {
+        g_diagnostic_queued.store(0, std::memory_order_release);
+        return false;
+    }
+    std::memcpy(command, g_diagnostic_command.c_str(), g_diagnostic_command.size() + 1);
+    g_diagnostic_queued.store(0, std::memory_order_release);
+    return true;
+}
+
+void Ui(double fps) {
+    app::Overlay(fps);
+    if (!DiagnosticCommandsEnabled()) {
+        g_diagnostic_open.store(false, std::memory_order_relaxed);
+        g_diagnostic_focus.store(false, std::memory_order_relaxed);
+        return;
+    }
+    if (!g_diagnostic_open.load(std::memory_order_relaxed)) return;
+
+    char input[sizeof(g_diagnostic_input)];
+    {
+        std::lock_guard lock(g_diagnostic_lock);
+        std::memcpy(input, g_diagnostic_input, sizeof(input));
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(560.0f, 170.0f), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Diagnostic script command")) {
+        ImGui::End();
+        return;
+    }
+    ImGui::TextWrapped("Runs on the next in-game text update. Guest commands can change or overwrite saves.");
+    if (g_diagnostic_focus.exchange(false, std::memory_order_relaxed)) ImGui::SetKeyboardFocusHere();
+    ImGui::InputText("Command", input, sizeof(input));
+    bool execute = ImGui::Button("Execute");
+    ImGui::SameLine();
+    bool close = ImGui::Button("Close");
+    {
+        std::lock_guard lock(g_diagnostic_lock);
+        std::memcpy(g_diagnostic_input, input, sizeof(input));
+    }
+    if (execute) QueueDiagnosticCommand(input);
+    if (close) g_diagnostic_open.store(false, std::memory_order_relaxed);
+    ImGui::End();
+}
+
 void Window(void* hwnd) {
     g_hwnd = hwnd;
+    if (DiagnosticCommandsEnabled()) LoadDiagnosticCommandFile();
     RAWINPUTDEVICE rid{};
     rid.usUsagePage = 0x01;  // generic desktop
     rid.usUsage = 0x02;      // mouse
@@ -249,6 +366,23 @@ bool Message(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* resu
             if (wp < 256) {
                 std::lock_guard lock(g_lock);
                 g_keys[wp] = true;
+            }
+            // In a diagnostic session only, F8 opens the script-command console and F9 executes what is in it. The
+            // runtime's F1/F2/F3 keys stay untouched. The auto-repeat guard keeps one command per press.
+            if (DiagnosticCommandsEnabled() && !(lp & (intptr_t(1) << 30))) {
+                if (wp == VK_F8) {
+                    ToggleDiagnosticCommands();
+                    return true;
+                }
+                if (wp == VK_F9 && g_diagnostic_open.load(std::memory_order_relaxed)) {
+                    char command[sizeof(g_diagnostic_input)];
+                    {
+                        std::lock_guard lock(g_diagnostic_lock);
+                        std::memcpy(command, g_diagnostic_input, sizeof(command));
+                    }
+                    QueueDiagnosticCommand(command);
+                    return true;
+                }
             }
             return false;  // the runtime's own keys (F3) still work
         case WM_KEYUP:
@@ -302,9 +436,9 @@ void Pad(int port, input::Pad& pad) {
     if (port != 0) return;
     // the overlay can open or close between two mouse messages: keep the cursor state in step every poll
     UpdateCursor();
-    // the options overlay has the keyboard and mouse while it is up: a held key must not reach the game, and a
-    // mouse movement made in the overlay must not turn into a look when it closes
-    if (app::OverlayOpen()) {
+    // the options overlay and diagnostic console have the keyboard and mouse while up: a held key must not reach the
+    // game, and a mouse movement made in them must not turn into a look when they close
+    if (app::OverlayOpen() || DiagnosticCommandsOpen()) {
         std::lock_guard lock(g_lock);
         ClearInput();
         pad.connected = true;
@@ -430,15 +564,16 @@ void Pad(int port, input::Pad& pad) {
     // a held Esc would otherwise send Start, see the pause map on the next poll, then send B and close it again.
     bool escape = Held(VK_ESCAPE);
     if (escape && !g_escape_latched) {
-        if (maps.menu) analog[kB] = 0xFF;
+        if (maps.look_tutorial || maps.menu) analog[kB] = 0xFF;
         else buttons |= kStart;
     }
     g_escape_latched = escape;
-    // Enter: Select (A) in menus and wall cover on foot. In a vehicle A is the accelerator and the PC manual
-    // gives Enter no driving meaning, so it must not fall through there. System dialogs use B (pad back/dismiss),
-    // which is what the PC scheme shows as V on the "Load profile successful" screen.
+    // Enter: Start on the look tutorial, Select (A) in menus and wall cover on foot. In a vehicle A is the
+    // accelerator and the PC manual gives Enter no driving meaning, so it must not fall through there. The boot's
+    // "load or create" dialog needs this Start press to choose LOAD; notices are dismissed with Esc/B instead.
     if (Held(VK_RETURN)) {
-        if (maps.dialog) analog[kB] = 0xFF;
+        if (maps.look_tutorial) buttons |= kStart;
+        else if (maps.dialog) analog[kB] = 0xFF;
         else if (maps.menu || !in_vehicle) analog[kA] = 0xFF;
     }
 
@@ -486,6 +621,8 @@ PromptContext PromptContextNow() {
     if (maps.vehicle) return PromptContext::Vehicle;
     return PromptContext::OnFoot;
 }
+
+bool LookTutorialActive() { return ReadActionMaps().look_tutorial; }
 
 void Rumble(int, uint16_t& left, uint16_t& right) {
     // A keyboard/mouse player has no pad in their hands: drop the motors so a connected controller does not

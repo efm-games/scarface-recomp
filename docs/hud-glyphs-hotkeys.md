@@ -26,13 +26,16 @@ original controller artwork is hidden in memory by replacing its texture with a 
 | --- | --- | --- |
 | Interact / pick up / triangle-Y demand | `[E] ` before the original words | Original triangle glyph |
 | Sprint | `[Shift]` | Original A glyph |
-| Start / accept / confirm / cover / dialog close | `[Enter]` | Original A or X glyph |
-| Cancel / back / create / exit | `[Esc]` | Original B glyph |
+| Start / accept / confirm / cover | `[Enter]` | Original A or X glyph |
+| Dialog close / cancel / back / create / exit | `[Esc]` | Original B glyph |
 | Taunt / provoke | `[T]` | Original B glyph |
 | Blind rage | `[V]` | Original B glyph |
 | Tape player Play / Stop | `[T] ` before `PLAY` / `STOP` | Original B glyph |
 | Tape player Shuffle | `[Enter] SHUFFLE ON/OFF` | Original wording with "TURN" and the A glyph |
 | Mission start / profile / tutorial notices | `[Enter] Start`, `[Enter] Options and Profiles`, `[Esc] Exit Tutorial` | Original glyph and wording |
+
+On the look tutorial page the keys follow the labels: **Enter** sends the pad's Start (Options and Profiles) and
+**Esc** sends B (Exit Tutorial). Elsewhere Esc remains pause in the world and back in a menu.
 
 The music library is a deliberate exception. It snapshots the active input device when its page opens and keeps that
 style until another page is loaded, so changing device while the page is open does not mix key labels with pad glyphs.
@@ -51,7 +54,8 @@ both passes.
    remembered beside the label.
 3. **`sub_0024DF70`** (expander) records the source line around the original call, then rewrites the resulting wide
    buffer for prompts that do not go through a text-object constructor. On the pad path it removes injected labels and
-   restores the original music wording.
+   restores the original music wording. The second pass parses our own `[Enter]` / `[Esc]` text as tokens again, so
+   those label words are ignored by the line rules to keep both tutorial prompts from collapsing to one key.
 4. **`sub_002492A0` / `sub_00249300`** (wide and narrow text-object constructors) receive the final string. They keep
    both the plain and labeled variants, always hand the guest the longer labeled string so its buffer is large enough,
    and register the object for later device switches.
@@ -82,7 +86,7 @@ The fix is a three-level decision:
 
 1. **Line-level override.** The source sentence is scanned case-insensitively for known words. `sprint` / `run while`
    win over `start`; `start`, `accept`, `continue`, `select`, `[yes]`, `[load]` and `cover` mean `[Enter]`; `[close]`
-   means `[Enter]`; `rage` / `[hold]` mean `[V]`; `taunt` / `provoke` mean `[T]`; cancel/back words mean `[Esc]`.
+   means `[Esc]` (pad B); `rage` / `[hold]` mean `[V]`; `taunt` / `provoke` mean `[T]`; cancel/back words mean `[Esc]`.
    Every triangle/Y demand maps to `[E]`, including plain captions where only the artwork was hidden.
 2. **Bare-token fallback.** Well-known standalone tokens are classified without a source line.
 3. **Context table.** If neither rule fires, the three-context mapping is used.

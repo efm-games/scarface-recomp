@@ -23,14 +23,27 @@ post-release work.
   initialized in the launcher itself.
 - **Mouse sensitivity** has separate horizontal and vertical sliders with migration of the old single setting.
 
-## 1. DLSS 5 (lowest priority)
-
-Investigate NVIDIA DLSS 5 upscaling for the Direct3D 12 renderer as an optional quality/performance
-setting on supported GPUs, with a clean fallback to the current render path when it is unavailable.
-Fully optional: the base renderer must keep working without an NVIDIA card or extra redistributables.
-
 ## Later
 
+- **PC/PS2 save conversion** is in the save manager. It maps named variables from a PC or PS2 save
+  into a free or chosen Xbox profile folder (`save.dat`, `SaveImage.xbx`, `SaveMeta.xbx`), using an
+  existing Xbox profile as the template and a neutral placeholder image. The in-app path was rebuilt and
+  smoke-checked: a 100% PC save produced `E96EA342EF133018E2CC57D35CA0F3057253DF6F0F897E8045463D081341FE75`
+  and a PS2 save into profile 3 produced `9B91DAE910A251B074A736889D4EA8DBCD364AAB8327F9F5E5B87CBB407A5F60`;
+  both were accepted by the game through `Load Successful!`.
 - Test the save importer with real Xbox-format saves (`hdd\E\UDATA\5655003F`,
   `hdd\E\TDATA\5655003F`).
-- Texture popping during play is reported but explicitly not a priority.
+- Texture/lighting flash in the first mission at Tony's mansion is reported but explicitly not a priority. The user's
+  `20261118_232001_827.bmp` is the bright frame and `20261118_232002_978.bmp` is the same view looking normal a second
+  later. Their histories show the bright frame drawing the world with texture factors that sweep through `B6...` to
+  `CE...` while the normal frame holds `FE000000`; moving Tony can bring the steady value back. This looks like a
+  scene-tint state leaking into world draws, not a missing texture.
+
+## Declined: DLSS 5
+
+DLSS 5 is not planned for this project. The official SDK is not publicly available, and a proper
+integration would require renderer changes this project does not intend to make, including engine
+motion vectors, jitter, exposure/HDR data, semantic and engine masks, NVIDIA runtime packaging, and
+hardware gating. External user-installed overlay solutions are outside this project: they are not
+bundled, supported, or required, and the base renderer keeps working without an NVIDIA card or extra
+redistributables.
