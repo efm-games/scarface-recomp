@@ -12,19 +12,18 @@ The game's x86 code is statically recompiled ahead of time and the Xbox kernel/X
 
 ## Release
 
-This is the `v1.1.0` release. The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a keyboard and mouse or a gamepad. See [Known issues](#known-issues) for the remaining rough edges.
+This is the `v1.1.1` release. The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a keyboard and mouse or a gamepad. See [Known issues](#known-issues) for the remaining rough edges.
 
-### What's new in v1.1.0
+### What's new in v1.1.1
 
-- HUD key prompts replace pad glyphs with plain-text PC key labels while keyboard/mouse is active; the original glyphs return as soon as a pad is used. The music library keeps the prompt style it had when opened. Technical details are in [docs/hud-glyphs-hotkeys.md](docs/hud-glyphs-hotkeys.md).
-- **Unlock all cheats** makes every pause-menu code selectable from a new game; effects are still chosen manually.
-- Fixed the Esc pause path so one physical press opens the pause menu without immediately closing it.
-- The launcher's **Play (A)** button can be activated with gamepad **A**, matching the ready screen's Start (A).
-- Mouse sensitivity now has separate horizontal and vertical sliders, with migration of the old single setting.
+- The save manager can convert **PC and PS2 saves** into Xbox-format profiles, from the Saves tab or with `--import-save <folder|save file> [--save-slot 1|2|3]`. Existing Xbox saves stay untouched unless you select their slot.
+- Fixed the look tutorial's first-load prompts so **Enter** reads `[Enter] Options and Profiles` and **Esc** reads `[Esc] Exit Tutorial` immediately, without a menu round-trip. Dialog `[CLOSE]` also uses Esc/B consistently.
+
+The earlier HUD key-prompt and input work is described in [docs/hud-glyphs-hotkeys.md](docs/hud-glyphs-hotkeys.md).
 
 ## Installation
 
-1. Download `Scarface-v1.1.0.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
+1. Download `Scarface-v1.1.1.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
 2. Run `Scarface.exe`.
 3. Click **Browse for the disc image...** and pick your Xbox `.iso`/`.xiso` (a whole-disc dump also works), or **Use an extracted folder...** and pick the folder that holds `default.xbe`. The launcher remembers the path.
 4. Click **Play (A)** or press gamepad **A**. The first start compiles the game's code for your PC once with the bundled recompiler and Clang; it takes a few minutes and about 1 GB of free disk space. Every later start goes straight into the game.
@@ -89,6 +88,7 @@ Mouse sensitivity X and Y are separate options, along with Y inversion. The old 
 - Frame and state captures with **F2**/**F3** and the debug variables in [docs/debugging.md](docs/debugging.md).
 - History of the fixed white UI panel bug in [docs/white-ui-panels.md](docs/white-ui-panels.md).
 - Technical notes on HUD glyphs and key prompts in [docs/hud-glyphs-hotkeys.md](docs/hud-glyphs-hotkeys.md).
+- Project notes on the first-mission lighting investigation and the DLSS decision in [docs/PROJECT-NOTES.md](docs/PROJECT-NOTES.md).
 
 ## Known issues
 
