@@ -15,8 +15,10 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -34,12 +36,12 @@
 
 namespace kbm {
 
-bool enabled = true;
+bool enabled = false;  // gamepad is the default; keyboard and mouse are opt-in
 bool invert_y = false;
 uint32_t sensitivity_x = 100;  // percent of the base look speed
 uint32_t sensitivity_y = 100;  // percent of the base look speed
 bool modern_pad = false;
-bool hud_prompts = true;
+bool hud_prompts = false;  // experimental; the original controller glyphs are the default
 
 // Private diagnostic sessions only. This is deliberately not a settings option or a UI toggle: a normal player never
 // sees it, and it cannot be persisted in settings.toml. The environment variable must be exactly "1".
@@ -84,7 +86,104 @@ constexpr uint16_t kStart = 1 << 4, kBack = 1 << 5, kLeftThumb = 1 << 6, kRightT
 // analog[]: A B X Y black white left trigger right trigger
 constexpr int kA = 0, kB = 1, kX = 2, kY = 3, kBlack = 4, kWhite = 5, kLT = 6, kRT = 7;
 
+constexpr size_t kBindingCount = size_t(Binding::Count);
+
+// The keyboard defaults follow the original Xbox pad layout, not the PC manual's context-sensitive shortcuts. That
+// keeps every decision inside the game: a bound A key always sends A, in a menu, on foot and in a vehicle alike.
+const std::array<uint32_t, kBindingCount> kDefaultBindings = {
+    'W',       'S',       'A',       'D',       // left stick
+    VK_UP,     VK_DOWN,   VK_LEFT,   VK_RIGHT,  // d-pad
+    VK_SPACE,  'T',       'R',       'E',       // A, B, X, Y
+    VK_TAB,    'F',       VK_CAPITAL, kMouseLmb,// LB, RB, LT, RT
+    VK_BACK,   VK_ESCAPE, VK_LCONTROL, 'C',     // Back, Start, L3, R3
+};
+static_assert(kDefaultBindings.size() == kBindingCount);
+
+// Guest threads read these every pad poll while the window thread writes them in the editor.
+std::atomic<uint32_t> g_bindings[kBindingCount];
+struct BindingInitializer {
+    BindingInitializer() {
+        for (size_t i = 0; i < kBindingCount; ++i) g_bindings[i].store(kDefaultBindings[i]);
+    }
+} g_binding_initializer;
+size_t g_capture_binding = kBindingCount;  // window-thread only, like the ImGui editor that sets it
+
+const char* const kBindingLabels[kBindingCount] = {
+    "Left stick up",       "Left stick down",   "Left stick left",    "Left stick right",
+    "D-pad up",            "D-pad down",        "D-pad left",         "D-pad right",
+    "A",                   "B",                 "X",                  "Y",
+    "LB (white)",          "RB (black)",        "LT",                 "RT",
+    "Back",                "Start",             "L3 (left stick)",    "R3 (right stick)",
+};
+
+const char* const kBindingSettingNames[kBindingCount] = {
+    "move_up",   "move_down", "move_left",  "move_right", "dpad_up",    "dpad_down",
+    "dpad_left", "dpad_right", "face_a",    "face_b",     "face_x",     "face_y",
+    "lb",        "rb",        "lt",         "rt",         "back",       "start",
+    "l3",        "r3",
+};
+
+struct KeyName {
+    uint32_t code;
+    const char* name;
+};
+
+// Symbolic names in [keybindings]; the mouse codes are above the virtual-key range.
+const KeyName kKeyNames[] = {
+    {'A', "A"}, {'B', "B"}, {'C', "C"}, {'D', "D"}, {'E', "E"}, {'F', "F"}, {'G', "G"}, {'H', "H"},
+    {'I', "I"}, {'J', "J"}, {'K', "K"}, {'L', "L"}, {'M', "M"}, {'N', "N"}, {'O', "O"}, {'P', "P"},
+    {'Q', "Q"}, {'R', "R"}, {'S', "S"}, {'T', "T"}, {'U', "U"}, {'V', "V"}, {'W', "W"}, {'X', "X"},
+    {'Y', "Y"}, {'Z', "Z"},
+    {'0', "0"}, {'1', "1"}, {'2', "2"}, {'3', "3"}, {'4', "4"}, {'5', "5"}, {'6', "6"}, {'7', "7"},
+    {'8', "8"}, {'9', "9"},
+    {VK_SPACE, "SPACE"}, {VK_TAB, "TAB"}, {VK_RETURN, "ENTER"}, {VK_ESCAPE, "ESC"}, {VK_BACK, "BACK"},
+    {VK_SHIFT, "SHIFT"}, {VK_LSHIFT, "LSHIFT"}, {VK_RSHIFT, "RSHIFT"},
+    {VK_CONTROL, "CTRL"}, {VK_LCONTROL, "LCTRL"}, {VK_RCONTROL, "RCTRL"}, {VK_CAPITAL, "CAPS"},
+    {VK_MENU, "ALT"}, {VK_LMENU, "LALT"}, {VK_RMENU, "RALT"},
+    {VK_UP, "UP"}, {VK_DOWN, "DOWN"}, {VK_LEFT, "LEFT"}, {VK_RIGHT, "RIGHT"},
+    {VK_PRIOR, "PGUP"}, {VK_NEXT, "PGDN"}, {VK_HOME, "HOME"}, {VK_END, "END"}, {VK_INSERT, "INS"},
+    {VK_DELETE, "DEL"}, {VK_SNAPSHOT, "PRTSC"}, {VK_PAUSE, "PAUSE"},
+    {VK_OEM_1, "SEMICOLON"}, {VK_OEM_2, "SLASH"}, {VK_OEM_3, "TILDE"}, {VK_OEM_4, "LBRACKET"},
+    {VK_OEM_5, "BACKSLASH"}, {VK_OEM_6, "RBRACKET"}, {VK_OEM_7, "APOSTROPHE"}, {VK_OEM_PLUS, "PLUS"},
+    {VK_OEM_MINUS, "MINUS"}, {VK_OEM_COMMA, "COMMA"}, {VK_OEM_PERIOD, "PERIOD"},
+    {VK_NUMPAD0, "NUM0"}, {VK_NUMPAD1, "NUM1"}, {VK_NUMPAD2, "NUM2"}, {VK_NUMPAD3, "NUM3"},
+    {VK_NUMPAD4, "NUM4"}, {VK_NUMPAD5, "NUM5"}, {VK_NUMPAD6, "NUM6"}, {VK_NUMPAD7, "NUM7"},
+    {VK_NUMPAD8, "NUM8"}, {VK_NUMPAD9, "NUM9"}, {VK_ADD, "NUMPLUS"}, {VK_SUBTRACT, "NUMMINUS"},
+    {kMouseLmb, "LMB"}, {kMouseRmb, "RMB"}, {kMouseMmb, "MMB"},
+};
+
 bool Held(int vk) { return g_keys[vk & 0xFF]; }
+
+bool InputHeld(uint32_t code) {
+    if (!code) return false;
+    if (code == kMouseLmb) return g_lmb;
+    if (code == kMouseRmb) return g_rmb;
+    if (code == kMouseMmb) return g_mmb;
+    if (code >= kMouseKeyBase || code >= 256) return false;
+    return Held(int(code));
+}
+
+uint32_t KeyCodeFromNameImpl(const char* name) {
+    if (!name || !*name) return 0;
+    for (const KeyName& entry : kKeyNames)
+        if (::_stricmp(name, entry.name) == 0) return entry.code;
+    if (::_strnicmp(name, "VK_", 3) == 0) {
+        unsigned value = 0;
+        if (std::sscanf(name + 3, "%X", &value) == 1 && value >= 1 && value < 256) return uint32_t(value);
+    }
+    return 0;
+}
+
+const char* KeyCodeNameImpl(uint32_t code) {
+    if (!code) return "Unbound";
+    for (const KeyName& entry : kKeyNames)
+        if (entry.code == code) return entry.name;
+    // The capture accepts any virtual key. Keep one stable buffer per code so a whole table can be drawn in a frame.
+    static char names[256][12] = {};
+    char* text = names[code & 0xFF];
+    std::snprintf(text, 12, "VK_%02X", code & 0xFF);
+    return text;
+}
 
 int16_t AddStick(int16_t a, int16_t b) {
     return int16_t(std::clamp(int(a) + int(b), -32768, 32767));
@@ -119,18 +218,10 @@ bool PadActive(const input::Pad& pad) {
            std::abs(int(pad.ry)) > 4000;
 }
 
-// one of this port's keys is held, or the mouse moved or was clicked
+// one of the bound keys is held, or the mouse moved or was clicked
 bool KbmActive() {
-    static const int keys[] = {
-        'W', 'A', 'S', 'D', 'R', 'T', 'V', 'E', 'F', 'C', 'Q', 'Z', 'P', 'L', 'X',
-        '1', '2', '3', VK_NUMPAD1, VK_NUMPAD2, VK_NUMPAD3,
-        VK_RETURN, VK_SPACE, VK_TAB, VK_ESCAPE, VK_HOME, VK_PRIOR, VK_NEXT,
-        VK_SHIFT, VK_LSHIFT, VK_RSHIFT, VK_CONTROL, VK_LCONTROL, VK_RCONTROL,
-        VK_CAPITAL, VK_DELETE, VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT,
-        VK_OEM_1, VK_OEM_7, VK_OEM_PLUS, VK_OEM_MINUS
-    };
-    for (int key : keys)
-        if (Held(key)) return true;
+    for (size_t i = 0; i < kBindingCount; ++i)
+        if (InputHeld(g_bindings[i].load(std::memory_order_relaxed))) return true;
     return g_lmb || g_rmb || g_mmb || g_dx || g_dy || g_wheel;
 }
 
@@ -237,6 +328,24 @@ void UpdateCursor() {
     WantCursor(!g_active || overlay);
 }
 
+// Hiding the OS cursor is not enough to keep it in the game: on a multi-monitor desktop it can slide onto the other
+// screen, where a click takes focus away and raw mouse input stops. Clip it to the window's client area while the game
+// owns the mouse. ClipCursor applies to the calling thread, so only the window thread calls this; the game thread asks
+// for it through WM_SETCURSOR, posted by WantCursor when the cursor state changes.
+void ApplyCursorClip(HWND hwnd) {
+    if (!hwnd || g_cursor_shown || !g_active || ::IsIconic(hwnd)) {
+        ::ClipCursor(nullptr);
+        return;
+    }
+    RECT client{};
+    if (!::GetClientRect(hwnd, &client) || client.right <= client.left || client.bottom <= client.top) return;
+    POINT tl{client.left, client.top}, br{client.right, client.bottom};
+    ::ClientToScreen(hwnd, &tl);
+    ::ClientToScreen(hwnd, &br);
+    RECT clip{tl.x, tl.y, br.x, br.y};
+    ::ClipCursor(&clip);
+}
+
 void ClearInput() {
     for (bool& k : g_keys) k = false;
     g_lmb = g_rmb = g_mmb = false;
@@ -298,6 +407,65 @@ bool TakeDiagnosticCommand(char (&command)[256]) {
     }
     std::memcpy(command, g_diagnostic_command.c_str(), g_diagnostic_command.size() + 1);
     g_diagnostic_queued.store(0, std::memory_order_release);
+    return true;
+}
+
+size_t BindingCount() { return kBindingCount; }
+
+uint32_t KeyCodeFromName(const char* name) { return KeyCodeFromNameImpl(name); }
+
+const char* KeyCodeName(uint32_t code) { return KeyCodeNameImpl(code); }
+
+const char* BindingSettingName(size_t index) {
+    return index < kBindingCount ? kBindingSettingNames[index] : "";
+}
+
+void DescribeBinding(size_t index, const char** pad, const char** key, bool* changed) {
+    if (index >= kBindingCount) return;
+    if (pad) *pad = kBindingLabels[index];
+    if (key) *key = KeyCodeNameImpl(g_bindings[index].load(std::memory_order_relaxed));
+    if (changed) *changed = g_bindings[index].load(std::memory_order_relaxed) != kDefaultBindings[index];
+}
+
+void BeginBindingCapture(size_t index) {
+    if (index >= kBindingCount) return;
+    g_capture_binding = index;
+    ClearInput();
+}
+
+bool BindingCaptureActive() { return g_capture_binding < kBindingCount; }
+
+void CancelBindingCapture() { g_capture_binding = kBindingCount; }
+
+void ResetBinding(size_t index) {
+    if (index >= kBindingCount) return;
+    g_bindings[index].store(kDefaultBindings[index], std::memory_order_relaxed);
+    CancelBindingCapture();
+    ClearInput();
+    hud_prompts::RefreshKeyLabels();
+}
+
+void ResetAllBindings() {
+    for (size_t i = 0; i < kBindingCount; ++i)
+        g_bindings[i].store(kDefaultBindings[i], std::memory_order_relaxed);
+    CancelBindingCapture();
+    ClearInput();
+    hud_prompts::RefreshKeyLabels();
+}
+
+uint32_t BindingKeyCode(Binding binding) {
+    size_t index = size_t(binding);
+    return index < kBindingCount ? g_bindings[index].load(std::memory_order_relaxed) : 0;
+}
+
+bool SetBindingKeyCode(Binding binding, uint32_t code) {
+    size_t index = size_t(binding);
+    if (index >= kBindingCount) return false;
+    if (code && code != kMouseLmb && code != kMouseRmb && code != kMouseMmb && code >= 256) return false;
+    g_bindings[index].store(code, std::memory_order_relaxed);
+    CancelBindingCapture();
+    ClearInput();
+    hud_prompts::RefreshKeyLabels();
     return true;
 }
 
@@ -363,6 +531,15 @@ bool Message(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* resu
         }
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
+            if (g_capture_binding < kBindingCount) {
+                // The binding editor owns the next press. Esc cancels; a repeat is ignored so one press is one binding.
+                if (!(lp & (intptr_t(1) << 30))) {
+                    if (wp == VK_ESCAPE) CancelBindingCapture();
+                    else if (wp < 256)
+                        SetBindingKeyCode(Binding(g_capture_binding), uint32_t(wp));
+                }
+                return true;
+            }
             if (wp < 256) {
                 std::lock_guard lock(g_lock);
                 g_keys[wp] = true;
@@ -387,6 +564,7 @@ bool Message(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* resu
             return false;  // the runtime's own keys (F3) still work
         case WM_KEYUP:
         case WM_SYSKEYUP:
+            if (g_capture_binding < kBindingCount) return true;
             if (wp < 256) {
                 std::lock_guard lock(g_lock);
                 g_keys[wp] = false;
@@ -398,6 +576,16 @@ bool Message(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* resu
         case WM_RBUTTONUP:
         case WM_MBUTTONDOWN:
         case WM_MBUTTONUP: {
+            if (g_capture_binding < kBindingCount) {
+                bool down = msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN;
+                if (down) {
+                    uint32_t code = msg == WM_LBUTTONDOWN ? kMouseLmb
+                                    : msg == WM_RBUTTONDOWN ? kMouseRmb
+                                                            : kMouseMmb;
+                    SetBindingKeyCode(Binding(g_capture_binding), code);
+                }
+                return true;
+            }
             std::lock_guard lock(g_lock);
             if (msg == WM_LBUTTONDOWN) g_lmb = true;
             if (msg == WM_LBUTTONUP) g_lmb = false;
@@ -425,8 +613,17 @@ bool Message(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* resu
             // ImGui is told not to change the OS cursor, so this is now the only place that sets it: hidden
             // during play, plain arrow for the options overlay and whenever the window is not active
             ::SetCursor(g_cursor_shown ? ::LoadCursor(nullptr, IDC_ARROW) : nullptr);
+            ApplyCursorClip(static_cast<HWND>(hwnd));
             if (result) *result = TRUE;
             return true;
+        case WM_SIZE:
+        case WM_MOVE:
+            // the clip is an absolute screen rectangle, so it has to follow the window
+            ApplyCursorClip(static_cast<HWND>(hwnd));
+            return false;
+        case WM_DESTROY:
+            ::ClipCursor(nullptr);
+            return false;
         default:
             return false;
     }
@@ -462,29 +659,20 @@ void Pad(int port, input::Pad& pad) {
 
     bool pad_active = PadActive(pad);
     bool kbm_active = KbmActive();
-    ActionMaps maps = ReadActionMaps();
-    bool in_vehicle = maps.vehicle;
 
-    // movement and steering: WASD
+    // Fixed emulation: the left stick and every pad button come straight from the binding table. The game decides
+    // what each pad control means on the current screen, so no key is reinterpreted here by ActionMap.
     int16_t kx = 0, ky = 0;
-    if (in_vehicle) {
-        // Vehicles: A / D (also L / ' per PC manual) steer left/right
-        float mx = (float(Held('D')) || float(Held(VK_OEM_7))) - (float(Held('A')) || float(Held('L')));
-        if (mx != 0.0f) {
-            kx = mx > 0.0f ? 32767 : -32768;
-        }
-        // Gas and brake are mapped to buttons (A/X), so stick Y stays 0
-    } else {
-        // On foot: WASD analog left stick, normalized so diagonals are not faster
-        float mx = float(Held('D')) - float(Held('A'));
-        float my = float(Held('W')) - float(Held('S'));
-        if (float len = std::sqrt(mx * mx + my * my); len > 0) {
-            kx = int16_t(std::lround(mx / len * 32767.0f));
-            ky = int16_t(std::lround(my / len * 32767.0f));
-        }
+    float mx = float(InputHeld(BindingKeyCode(Binding::MoveRight))) -
+               float(InputHeld(BindingKeyCode(Binding::MoveLeft)));
+    float my = float(InputHeld(BindingKeyCode(Binding::MoveUp))) -
+               float(InputHeld(BindingKeyCode(Binding::MoveDown)));
+    if (float len = std::sqrt(mx * mx + my * my); len > 0) {
+        kx = int16_t(std::lround(mx / len * 32767.0f));
+        ky = int16_t(std::lround(my / len * 32767.0f));
     }
 
-    // look: raw mouse delta, consumed here so it is applied once
+    // Mouse look is always right-stick emulation and is not part of the binding table.
     int16_t krx = 0, kry = 0;
     int dx = g_dx, dy = g_dy;
     g_dx = g_dy = 0;
@@ -500,92 +688,30 @@ void Pad(int port, input::Pad& pad) {
     uint16_t buttons = 0;
     uint8_t analog[8] = {};
 
-    bool shift = Held(VK_SHIFT) || Held(VK_LSHIFT) || Held(VK_RSHIFT);
-    bool ctrl = Held(VK_CONTROL) || Held(VK_LCONTROL) || Held(VK_RCONTROL);
+    if (InputHeld(BindingKeyCode(Binding::DpadUp))) buttons |= kDpadUp;
+    if (InputHeld(BindingKeyCode(Binding::DpadDown))) buttons |= kDpadDown;
+    if (InputHeld(BindingKeyCode(Binding::DpadLeft))) buttons |= kDpadLeft;
+    if (InputHeld(BindingKeyCode(Binding::DpadRight))) buttons |= kDpadRight;
 
-    if (in_vehicle) {
-        // --- Vehicles (Official PC manual page 3) ---
-        // Forward / Gas: W or P
-        if (Held('W') || Held('P')) analog[kA] = 0xFF;
-        // Reverse / Brake: S or ; or R
-        if (Held('S') || Held(VK_OEM_1) || Held('R')) analog[kX] = 0xFF;
-        // Handbrake: Space (also T)
-        if (Held(VK_SPACE) || Held('T')) analog[kB] = 0xFF;
-        // Horn: T or X
-        if (Held('T') || Held('X')) analog[kA] = 0xFF;
-        // Enter / Exit vehicle: E
-        if (Held('E')) analog[kY] = 0xFF;
-        // Fire from vehicle: LMB or Left Ctrl or F
-        if (g_lmb || ctrl || Held('F')) analog[kRT] = 0xFF;
-        // Lock target: Caps Lock or RMB or Delete
-        if (g_rmb || Held(VK_CAPITAL) || Held(VK_DELETE)) analog[kLT] = 0xFF;
-        // Look Back: MMB or Z or Page Down
-        if (g_mmb || Held('Z') || Held(VK_NEXT)) analog[kBlack] = 0xFF;
-        // Switch Camera: C or Page Up or Home
-        if (Held('C') || Held(VK_PRIOR) || Held(VK_HOME)) buttons |= kRightThumb;
-    } else {
-        // --- On Foot (Official PC manual page 3) ---
-        // Fire: Space or LMB
-        if (g_lmb || Held(VK_SPACE)) analog[kRT] = 0xFF;
-        // Alt fire / melee shove: F or MMB
-        if (g_mmb || Held('F')) analog[kBlack] = 0xFF;
-        // Reload: R
-        if (Held('R')) analog[kX] = 0xFF;
-        // Sprint: Left or Right Shift
-        if (shift) analog[kA] = 0xFF;
-        // Wall cover: Enter
-        if (Held(VK_RETURN)) analog[kA] = 0xFF;
-        // Crouch: Left or Right Ctrl (L3 thumbstick, without A button combo)
-        if (ctrl) buttons |= kLeftThumb;
-        // Lock-on: Caps Lock or RMB or Delete
-        if (g_rmb || Held(VK_CAPITAL) || Held(VK_DELETE)) analog[kLT] = 0xFF;
-        // Recenter camera: C or Home
-        if (Held('C') || Held(VK_HOME)) buttons |= kRightThumb;
-        // Blind rage: hold V
-        if (Held('V')) analog[kB] = 0xFF;
-        // Provoke / Talk / Taunt: T or X
-        if (Held('T') || Held('X')) analog[kB] = 0xFF;
-        // Enter car / Pick up weapon / Interact: E
-        if (Held('E')) analog[kY] = 0xFF;
-    }
+    if (InputHeld(BindingKeyCode(Binding::A))) analog[kA] = 0xFF;
+    if (InputHeld(BindingKeyCode(Binding::B))) analog[kB] = 0xFF;
+    if (InputHeld(BindingKeyCode(Binding::X))) analog[kX] = 0xFF;
+    if (InputHeld(BindingKeyCode(Binding::Y))) analog[kY] = 0xFF;
+    if (InputHeld(BindingKeyCode(Binding::LB))) analog[kWhite] = 0xFF;
+    if (InputHeld(BindingKeyCode(Binding::RB))) analog[kBlack] = 0xFF;
+    if (InputHeld(BindingKeyCode(Binding::LT))) analog[kLT] = 0xFF;
+    if (InputHeld(BindingKeyCode(Binding::RT))) analog[kRT] = 0xFF;
 
-    // --- Weapons & Inventory ---
-    // Weapon 1 (prev): 1
-    if (Held('1') || Held(VK_NUMPAD1)) buttons |= kDpadLeft;
-    // Weapon 2 (next): 2
-    if (Held('2') || Held(VK_NUMPAD2)) buttons |= kDpadRight;
-    // Holster: 3
-    if (Held('3') || Held(VK_NUMPAD3)) buttons |= kDpadDown;
+    if (InputHeld(BindingKeyCode(Binding::L3))) buttons |= kLeftThumb;
+    if (InputHeld(BindingKeyCode(Binding::R3))) buttons |= kRightThumb;
+    if (InputHeld(BindingKeyCode(Binding::Back))) buttons |= kBack;
 
-    // SAT phone: Tab
-    if (Held(VK_TAB)) analog[kWhite] = 0xFF;
+    // Start is edge-triggered: a held key must not re-open and close the pause screen on successive polls.
+    bool start = InputHeld(BindingKeyCode(Binding::Start));
+    if (start && !g_escape_latched) buttons |= kStart;
+    g_escape_latched = start;
 
-    // Pause / Esc: Start in the world, B in a front end screen (the pad's back). Emit only on the key's rising edge;
-    // a held Esc would otherwise send Start, see the pause map on the next poll, then send B and close it again.
-    bool escape = Held(VK_ESCAPE);
-    if (escape && !g_escape_latched) {
-        if (maps.look_tutorial || maps.menu) analog[kB] = 0xFF;
-        else buttons |= kStart;
-    }
-    g_escape_latched = escape;
-    // Enter: Start on the look tutorial, Select (A) in menus and wall cover on foot. In a vehicle A is the
-    // accelerator and the PC manual gives Enter no driving meaning, so it must not fall through there. The boot's
-    // "load or create" dialog needs this Start press to choose LOAD; notices are dismissed with Esc/B instead.
-    if (Held(VK_RETURN)) {
-        if (maps.look_tutorial) buttons |= kStart;
-        else if (maps.dialog) analog[kB] = 0xFF;
-        else if (maps.menu || !in_vehicle) analog[kA] = 0xFF;
-    }
-
-    // Menus: Arrow keys stand in for Xbox d-pad
-    if (Held(VK_UP)) buttons |= kDpadUp;
-    if (Held(VK_DOWN)) buttons |= kDpadDown;
-    if (Held(VK_LEFT)) buttons |= kDpadLeft;
-    if (Held(VK_RIGHT)) buttons |= kDpadRight;
-
-    // Mouse wheel cycles weapons (d-pad left/right)
-    if (g_wheel > 0) buttons |= kDpadRight;
-    if (g_wheel < 0) buttons |= kDpadLeft;
+    // The wheel no longer sends a pad control; clear it so it cannot linger as keyboard activity.
     g_wheel = 0;
 
     // either device can hold a button, the larger analog value wins, and the sticks add

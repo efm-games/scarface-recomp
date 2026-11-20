@@ -1,77 +1,58 @@
-# Default keyboard and mouse controls
+# Controls
 
-The recomp targets the Xbox version's game logic, so the keyboard/mouse layer synthesizes the
-equivalent original-Xbox pad state on the fly. Defaults follow the official PC manual of
-*Scarface: The World Is Yours* (page 3), with context-sensitive detection (on foot vs vehicle)
-driven by reading the active ActionMap stack from guest memory (`0x471468`).
+A gamepad is the default. Xbox, PlayStation and Switch controllers are detected automatically, with hot plugging and
+rumble. Keyboard and mouse are opt-in: enable **Keyboard and mouse (opt-in)** in the launcher, the F1 options overlay,
+or `settings.toml`, then edit the fixed pad bindings in the Controls tab.
 
-## On foot
+The keyboard layer does not reinterpret keys for each game context. Each bound key or mouse button sends one Xbox pad
+control, and the game decides what that control means in a menu, on foot or in a vehicle. Mouse look always drives the
+right stick. This is the safest layout because the game keeps its own context-sensitive input handling.
 
-| PC manual default | Action | Xbox pad equivalent |
+## Default keyboard to Xbox pad bindings
+
+| Xbox pad control | Default key | Typical use |
 | --- | --- | --- |
-| W / A / S / D | Character movement | Left stick |
-| Mouse move | Look / camera | Right stick |
-| Space / Left click | Fire weapon; punch/melee when unarmed | RT |
-| Caps Lock / Right click / Delete | Lock target / strafe | LT |
-| F / Middle click | Alternative fire / shove / melee counter | Black |
-| Shift (Left/Right) | Sprint | A |
-| Left Ctrl | Crouch | Left thumb (L3) |
-| Enter | Wall cover | A |
-| E | Get into car / pick up weapon / interact | Y |
-| R | Reload | X |
-| T / X | Talk / taunt / provoke | B |
-| V (hold) | Blind rage | B |
-| 1 / 2 | Weapon select (prev / next) | D-pad left / right |
-| 3 | Equip / conceal weapon | D-pad down |
-| Mouse wheel | Cycle weapons | D-pad left / right |
-| Tab | SAT phone menu | White |
-| Esc | Pause | Start |
-| C / Home | Centre camera | Right thumb (R3) |
+| Left stick up/down/left/right | W / S / A / D | Move / steer |
+| Right stick | Mouse move | Look / camera |
+| D-pad up/down/left/right | Arrow keys | Menu selection and weapon selection |
+| A | Space | Confirm, sprint, wall cover, accelerate |
+| B | T | Back, taunt, rage, handbrake |
+| X | R | Reload, brake |
+| Y | E | Interact, enter or exit a vehicle |
+| LB (white) | Tab | SAT phone |
+| RB (black) | F | Alternate fire, look back |
+| LT | Caps Lock | Lock target |
+| RT | Left click | Fire |
+| L3 | Left Ctrl | Crouch |
+| R3 | C | Recentre or change camera |
+| Back | Backspace | Back button |
+| Start | Esc | Pause |
 
-## Vehicles
+The mouse wheel no longer sends a pad control. The old PC-manual context rules (for example W meaning both “move
+forward” and “accelerate”) are replaced by this fixed pad map, so the keys in a prompt are the keys that actually send
+the pad control the game asks for.
 
-Context is automatically detected via `WheeledVehicleActionMap`, `BoatActionMap`, `HelicopterActionMap`, or `AirplaneActionMap`.
+### Rebinding
 
-| PC manual default | Action | Xbox pad equivalent |
-| --- | --- | --- |
-| W / P | Accelerate / forward | A (analog) |
-| S / ; / R | Brake / reverse | X (analog) |
-| A / D (or L / ') | Steer | Left stick X |
-| Space / T | Handbrake / boat tight turn | B (analog) |
-| Mouse move | Look / camera | Right stick |
-| Left click / Left Ctrl / F | Fire weapon from vehicle | RT |
-| Caps Lock / Right click / Delete | Lock target | LT |
-| Z / Middle click / Page Down | Look back | Black |
-| C / Page Up / Home | Switch camera view | Right thumb (R3) |
-| E | Enter / exit vehicle | Y |
-| T / X | Horn | A |
-| 1 / 2 / Mouse wheel | Cycle weapons | D-pad left / right |
-| 3 | Equip / conceal weapon | D-pad down |
-| Tab | SAT phone menu | White |
-| Esc | Pause | Start |
+In the launcher or F1 Controls tab, find **Keyboard to Xbox pad bindings**:
 
-## Menus
+1. Turn on Keyboard and mouse if it is off.
+2. Click the key cell for a pad control.
+3. Press the keyboard key or mouse button you want. Esc cancels without changing anything.
+4. Use **Reset** on a row, or **Reset all bindings to Xbox defaults**, to restore the table above.
 
-| PC manual default | Action | Xbox pad equivalent |
-| --- | --- | --- |
-| Arrow keys / W A S D | Move selection | D-pad |
-| Enter | Select / Confirm | A |
-| Esc | Back out / cancel / pause | B / Start |
-| Mouse wheel | Change page / cycle | D-pad left / right |
+An asterisk marks a changed row. Bindings are written to `settings.toml` under `[keybindings]`; an absent table means
+the defaults above. A settings file from an older build keeps keyboard enabled and its existing mouse sensitivity.
 
-## Any time
+## Experimental options
 
-| Key | Action |
-| --- | --- |
-| F1 | Open or close the options overlay |
-| F2 | Save the current frame as a BMP in the `screenshots` folder beside the executable |
-| F3 | Capture the next frame in full under the `capture` folder, for debugging (see [debugging.md](debugging.md)) |
+Both options below are off by default. They remain available for players who want them, but they are not the default
+because the game's prompts and vehicle inputs are context-sensitive.
 
-## Modern gamepad controls (optional)
+### Modern gamepad controls (GTA-style)
 
-Set `modern_pad = true` in `settings.toml`, or tick **Modern gamepad controls (GTA-style)** in the Controls tab
-of the launcher or the F1 overlay. It is off by default and remaps only a physical pad; the keyboard and mouse
-bindings above are unchanged.
+Set `modern_pad = true` in `settings.toml`, or tick **Experimental: Modern gamepad controls (GTA-style)** in the
+Controls tab. It remaps only a physical pad, and only while driving. The keyboard bindings above are unchanged.
 
 | Pad input | Action while driving |
 | --- | --- |
@@ -88,36 +69,41 @@ bindings above are unchanged.
 | Right stick | Camera |
 | Y / d-pad / R3 | Enter or exit / weapons / camera view as before |
 
-On foot the original layout already follows the twin-stick convention (left stick move, right stick camera,
-RT fire, LT lock), so it is left unchanged. The game has no separate horn button: the horn is the same pad
-input as accelerate, so pressing B also gives a brief throttle input.
+On foot the original layout already follows the twin-stick convention (left stick move, right stick camera, RT fire,
+LT lock), so it is left unchanged. The game has no separate horn button: the horn is the same pad input as accelerate,
+so pressing B also gives a brief throttle input.
 
-## Implementation Notes
+### HUD key prompts
 
-- **Context-sensitive detection (`InVehicle()`):** The guest ActionMap stack is tracked at guest
-  VA `0x471468`. When Tony gets into a car, boat, plane, or helicopter, the corresponding vehicle
-  action map is pushed to the stack. `kbm::Pad()` checks this stack on each input poll and remaps
-  `W`/`S` from stick movement to throttle (`A`) and brake/reverse (`X`), and `Space` from fire (`RT`)
-  to handbrake (`B`).
-- **Simultaneous gamepad + keyboard/mouse:** Real controller inputs and keyboard/mouse inputs augment
-  each other without conflict. Digital buttons are OR'd, analog triggers take `max()`, and stick inputs
-  are clamped additions. Active input device transitions on the fly without disabling either.
-- **HUD key prompts:** With `hud_key_prompts = true`, pad glyph tokens in HUD text become bracketed key
-  labels while keyboard/mouse is active (or before the first input). The substitution is
-  context-sensitive, and the words on the prompt line settle shared meanings: Start, Load, Accept and
-  Cover and dialog `[CLOSE]` are `[Enter]`, sprint is `[Shift]`, cancel/back/create are `[Esc]`,
-  taunt is `[T]`, rage is `[V]` and pick up/interact is `[E]`. A bare A token otherwise means Shift on foot and W while
-  driving. Plain triangle/Y captions get `[E] ` in front of their original wording; the tape-player glyph before
-  `PLAY`/`STOP` is replaced with `[T] `, and the Shuffle caption becomes `[Enter] SHUFFLE ON/OFF`, matching the key
-  that toggles it on that screen and dropping "TURN" so it does not overlap the adjacent tip. Gamepad prompts keep the
-  original wording. Outside the music library, using a controller removes injected labels and restores the original
-  glyphs. The music library snapshots the active input
-  when its page opens and keeps that style until you leave, so switching devices on that screen does not mix labels
-  and glyphs. See [hud-glyphs-hotkeys.md](hud-glyphs-hotkeys.md) for the technical details.
-- **Mouse look:** Raw X and Y deltas have separate `kbm_sensitivity_x` and `kbm_sensitivity_y` sliders
-  in the launcher/F1 options, and `invert_y` flips only the vertical sign. The old single
-  `kbm_sensitivity` setting is migrated to both axes.
-- **Overlay capture:** When the ImGui options overlay (F1) is open, keyboard and mouse inputs are
-  neutralized to prevent unintended in-game actions.
+Set `hud_key_prompts = true`, or tick **Experimental: PC key prompts in the HUD**. Pad glyph tokens become bracketed
+names of the keys bound to those pad controls while keyboard/mouse is active. Touching a controller restores the
+original glyphs; the music library snapshots the active input when its page opens and keeps that style until you leave.
 
-Sources: Official *Scarface: The World Is Yours* PC Manual (page 3, "Default Controls").
+These labels still depend on the game's context-sensitive prompt text. If a prompt describes an action with the wrong
+pad glyph, the key name will follow that glyph, so the original controller glyphs remain the default.
+
+## Any time
+
+| Key | Action |
+| --- | --- |
+| F1 | Open or close the options overlay |
+| F2 | Save the current frame as a BMP in the `screenshots` folder beside the executable |
+| F3 | Capture the next frame in full under the `capture` folder, for debugging (see [debugging.md](debugging.md)) |
+
+## Implementation notes
+
+- **Fixed emulation:** `src/common/kbm.cpp` keeps one atomic key code per Xbox pad control. `kbm::Pad()` turns those
+  codes into a normal pad report; it no longer reads the guest ActionMap stack to reinterpret keys. The recompiler's
+  game code still reads ActionMaps normally to decide what each pad control does.
+- **Simultaneous gamepad + keyboard/mouse:** Real controller inputs and keyboard/mouse inputs augment each other.
+  Digital buttons are OR'd, analog triggers take `max()`, and stick inputs are clamped additions. The active input
+  device switches on the fly.
+- **Mouse look:** Raw X and Y deltas use the separate `kbm_sensitivity_x` and `kbm_sensitivity_y` sliders; `invert_y`
+  flips only the vertical sign. The old single `kbm_sensitivity` setting is migrated to both axes.
+- **Overlay capture:** While the ImGui options overlay (F1) is open, keyboard and mouse input is neutralized so an edit
+  cannot leak into the game. Key capture swallows the key press and release used to set a binding.
+- **Settings compatibility:** The `[keybindings]` table is optional. Bindings are saved with the other settings; an
+  old file without the table uses the defaults. Reserved runtime keys (F1/F2/F3 and the diagnostic F8/F9) can be seen
+  by the capture but should not be assigned as game bindings.
+
+Sources: Official *Scarface: The World Is Yours* PC Manual (page 3, "Default Controls"), used as a historical reference. The fixed binding table above is this port's emulator-style layout.

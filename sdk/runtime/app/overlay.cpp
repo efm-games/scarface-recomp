@@ -123,6 +123,7 @@ void Overlay(double fps) {
         }
         if (ImGui::BeginTabItem("Controls")) {
             ui::InputOptions();
+            ui::BindingEditor();
             ui::ModernControls();
             ui::ControllerNote();
             ui::KeyBindings();
@@ -151,7 +152,8 @@ void Overlay(double fps) {
     if (ImGui::Button("Save and resume", ImVec2(button, 0))) close = true;
 
     ImGui::End();
-    if (!open || close || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) SetOverlay(false);
+    bool capturing = kGame.binding_capture_active && kGame.binding_capture_active();
+    if (!open || close || (!capturing && ImGui::IsKeyPressed(ImGuiKey_Escape, false))) SetOverlay(false);
 }
 
 }  // namespace app

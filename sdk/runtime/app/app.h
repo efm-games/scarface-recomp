@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <mutex>
@@ -125,6 +126,15 @@ struct GameInfo {
     std::vector<std::pair<const char*, const char*>> images;  // xbe file name, executable name
     std::vector<Option> options;
     std::vector<ControlSection> controls;  // the default bindings the Controls tab lists; may stay empty
+    // game-owned keyboard-to-pad binding editor, called by the shared Controls tab. The SDK stays generic: it knows
+    // only these callbacks, not the game's binding enum or key codes.
+    size_t (*binding_count)();
+    void (*binding_describe)(size_t index, const char** pad, const char** key, bool* changed);
+    void (*binding_capture)(size_t index);
+    bool (*binding_capture_active)();
+    void (*binding_capture_cancel)();
+    void (*binding_reset)(size_t index);
+    void (*binding_reset_all)();
     // the settings file's toml::table, for what options cannot hold
     void (*load)(const void* table);
     void (*save)(void* table);
@@ -169,6 +179,7 @@ void Style(float unit);
 bool LoadFont(float unit);  // Segoe UI at this scale; false when the font is missing
 void Display(Settings& s, bool live);  // live: apply a mode or resolution change as it is made
 void InputOptions();                   // this game's own settings, kGame.options
+void BindingEditor();                  // game-owned keyboard-to-pad map, when kGame supplies the callbacks
 void ControllerNote();
 void ModernControls();                 // active GTA-style pad bindings, shown when the preset is enabled
 void KeyBindings();                    // kGame.controls, the default keyboard and mouse bindings

@@ -1,7 +1,7 @@
 # Project notes
 
-Background notes that are not a work queue. `v1.2.0` is the current release; with the graphics defect below resolved
-the project is considered definitive, and further work is limited to bug fixes.
+Background notes that are not a work queue. `v1.3.0` is the current release. With the graphics defect below resolved,
+further work is limited to bug fixes and the explicitly approved input changes recorded here.
 
 ## First-mission lighting/texture flash
 
@@ -21,6 +21,35 @@ The fix is in `MakePixelKey()` in `sdk/runtime/gpu/shaders.cpp`: stage 0 with a 
 `arg1 = CURRENT` and `arg2 = TEXTURE` is now rewritten to `MODULATE(CURRENT, TEXTURE)`, exactly like the existing
 disabled-stage and white-UI-panel rules. The sweep itself is not applied by those draws, so it does not need changing;
 only the combiner that discarded the lighting did.
+
+## Multi-monitor cursor escape
+
+The game hides the Windows cursor with `SetCursor(nullptr)` but never confined it. On a multi-monitor desktop the
+hidden pointer can slide outside the game window; a click then activates another window, sends `WM_ACTIVATE` with
+`WA_INACTIVE`, clears input and stops raw mouse look until the game window is clicked again. A synthetic `mouse_event`
+injected from another process bypasses the game thread's clip and is not a valid test of the fix.
+
+`kbm::ApplyCursorClip()` now clips the pointer to the window's client rectangle while the game owns it. It is applied
+on `WM_SETCURSOR`, `WM_SIZE` and `WM_MOVE`, and released on deactivate, overlay, minimize and destroy. Because
+`ClipCursor` is thread-affine, only the window thread calls it. Windowed-mode playtesting confirmed the fix; the dev
+machine has one monitor, so the exact two-monitor escape could not be reproduced locally.
+
+## Fixed keyboard-to-Xbox bindings
+
+The earlier keyboard layer reinterpreted a key from the guest ActionMap stack: for example W moved on foot but
+accelerated in a car, and Space fired on foot but handbraked in a vehicle. That is convenient but ambiguous, and it
+made a HUD key prompt describe an action rather than the key actually being sent.
+
+`src/common/kbm.cpp` now stores one atomic key code per Xbox pad control. `kbm::Pad()` emits the corresponding pad
+report without reading ActionMaps, so the game keeps its own context-sensitive meaning for A, B, X, Y, triggers and the
+d-pad. Mouse look remains a raw right-stick emulation and is intentionally outside the binding table. The shared
+Controls tab exposes a game-owned editor through `app::GameInfo` callbacks in both the launcher and the F1 overlay,
+with capture, Esc cancel, per-row reset and reset-all.
+
+Bindings persist under `[keybindings]` in `settings.toml`; an absent table means the defaults. A settings file from an
+older build keeps keyboard enabled and its existing sensitivity values. Gamepad is the default, and the GTA-style pad
+preset and PC key prompts are experimental and off by default. PC prompt labels are rebuilt from the binding table when
+it changes, so a rebind is visible in the HUD, with a mutex guarding the label refresh against text expansion.
 
 ## Declined: DLSS 5
 

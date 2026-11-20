@@ -52,6 +52,12 @@ std::string SizeText(uint32_t width, uint32_t height) {
     return text;
 }
 
+bool OptionEnabled(const char* key) {
+    for (const Option& o : kGame.options)
+        if (o.flag && std::strcmp(o.key, key) == 0) return *o.flag;
+    return false;
+}
+
 }  // namespace
 
 void Style(float unit) {
@@ -204,14 +210,70 @@ void InputOptions() {
     if (!any) ImGui::TextDisabled("This game has no input settings.");
 }
 
+void BindingEditor() {
+    if (!kGame.binding_count || !kGame.binding_describe || !kGame.binding_capture) return;
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+    ImGui::TextColored(kAccent, "Keyboard to Xbox pad bindings");
+    ImGui::TextWrapped("A gamepad is the default. Turn on Keyboard and mouse above to use these fixed bindings: each "
+                       "key sends one Xbox pad control, and the game decides what that control means on the current "
+                       "screen. Mouse look always drives the right stick.");
+    bool keyboard = OptionEnabled("kbm");
+    if (!keyboard) ImGui::TextDisabled("Keyboard and mouse are off; the saved bindings below are used when enabled.");
+
+    bool capturing = kGame.binding_capture_active && kGame.binding_capture_active();
+    if (capturing) {
+        ImGui::TextColored(kAccent, "Press a key or mouse button for the selected control. Esc cancels.");
+        if (kGame.binding_capture_cancel && ImGui::Button("Cancel capture")) kGame.binding_capture_cancel();
+    }
+
+    if (!keyboard) ImGui::BeginDisabled();
+    if (ImGui::BeginTable("##binding-editor", 3,
+                          ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg |
+                              ImGuiTableFlags_BordersInnerV)) {
+        ImGui::TableSetupColumn("Xbox pad control", ImGuiTableColumnFlags_WidthStretch, 0.50f);
+        ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthStretch, 0.32f);
+        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 64.0f);
+        ImGui::TableHeadersRow();
+        size_t count = kGame.binding_count();
+        for (size_t i = 0; i < count; ++i) {
+            const char* pad = "?", *key = "?", *unused = nullptr;
+            bool changed = false;
+            kGame.binding_describe(i, &pad, &key, &changed);
+            (void)unused;
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextUnformatted(pad);
+            ImGui::TableSetColumnIndex(1);
+            std::string label = changed ? std::string("* ") + key : std::string(key);
+            char id[32];
+            std::snprintf(id, sizeof(id), "##bind-%zu", i);
+            if (ImGui::Button(label.c_str(), ImVec2(-1, 0))) kGame.binding_capture(i);
+            ImGui::TableSetColumnIndex(2);
+            std::snprintf(id, sizeof(id), "Reset##bind-%zu", i);
+            if (kGame.binding_reset && ImGui::Button(id)) kGame.binding_reset(i);
+        }
+        ImGui::EndTable();
+    }
+    if (kGame.binding_reset_all && ImGui::Button("Reset all bindings to Xbox defaults"))
+        kGame.binding_reset_all();
+    if (!keyboard) ImGui::EndDisabled();
+    ImGui::TextDisabled("An asterisk marks a changed binding. These are saved with the other settings.");
+}
+
 void ControllerNote() {
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
-    ImGui::TextWrapped("Controllers (Xbox, PlayStation and Switch) are detected automatically. The keyboard and mouse "
-                       "work alongside a connected controller; whichever you touch last drives the game.");
-    ImGui::TextWrapped("With PC key prompts enabled, HUD button glyphs become key labels while the keyboard or mouse "
-                       "is active. Touching a controller brings the original glyphs straight back.");
+    ImGui::TextWrapped("A gamepad is the default. Controllers (Xbox, PlayStation and Switch) are detected "
+                       "automatically. Keyboard and mouse are opt-in and work alongside a connected controller; "
+                       "whichever you touch last drives the game.");
+    ImGui::TextWrapped("Experimental PC key prompts replace HUD controller glyphs with the keys from the binding "
+                       "table while the keyboard or mouse is active. The game's context-sensitive prompts can still "
+                       "be misleading, so the original glyphs are the default. Touching a controller brings them "
+                       "straight back.");
 }
 
 void ModernControls() {
@@ -238,9 +300,9 @@ void ModernControls() {
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
-    ImGui::TextColored(kAccent, "Modern gamepad controls - active bindings");
-    ImGui::TextWrapped("Only the physical pad is remapped, and only while driving. On foot the original pad "
-                       "layout applies; keyboard and mouse bindings are unchanged.");
+    ImGui::TextColored(kAccent, "Experimental: modern gamepad controls - active bindings");
+    ImGui::TextWrapped("This preset is experimental: only the physical pad is remapped, and only while driving. On "
+                       "foot the original pad layout applies; keyboard and mouse bindings are unchanged.");
     if (ImGui::BeginTable("##modern-controls", 2,
                           ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg |
                               ImGuiTableFlags_BordersInnerV)) {

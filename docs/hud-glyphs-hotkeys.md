@@ -5,6 +5,12 @@ The goal was to let a keyboard/mouse player read every HUD prompt without losing
 players who use a pad. No game assets are added: the labels are plain text in the game's existing HUD font, and the
 original controller artwork is hidden in memory by replacing its texture with a transparent one.
 
+> [!NOTE]
+> PC key prompts are now **experimental and off by default**. The table below records the original v1.1.0 design.
+> The current label table is rebuilt from the keyboard-to-Xbox binding map in [controls.md](controls.md), so a
+> rebind is shown in the HUD. The game's context-sensitive prompt text can still pair a word with the wrong pad glyph;
+> original controller glyphs remain the default.
+
 ## Goals and constraints
 
 - Keyboard/mouse and a real controller must keep working together. The last device to send input decides which prompt

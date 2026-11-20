@@ -3,7 +3,9 @@
 
 #include <atomic>
 #include <cstring>
+#include <initializer_list>
 #include <mutex>
+#include <string>
 
 #include "common/kbm.h"
 #include "cpu/x86_ops.h"
@@ -82,10 +84,13 @@ constexpr uint32_t kPromptContexts = 3;
 
 static_assert(sizeof(char16_t) == 2, "guest strings are UTF-16LE");
 
+// The binding editor can rebuild labels on the window thread while the game thread expands text.
+std::mutex g_label_mutex;
+
 struct KeyPrompt {
     const char* token;
-    // Indexed by kbm::PromptContext: on foot, vehicle, menu.
-    const char16_t* labels[kPromptContexts];
+    // Indexed by kbm::PromptContext: on foot, vehicle, menu. Rebuilt from the bindings when they change.
+    std::u16string labels[kPromptContexts];
     uint32_t va[kPromptContexts] = {};
 };
 
@@ -163,6 +168,104 @@ KeyPrompt kLookTutorialStartPrompt = {"BUTTON_GRAPHIC_START",
 KeyPrompt kLookTutorialExitPrompt = {"BUTTON_GRAPHIC_CIRCLE",
                                      {u"[Esc] Exit Tutorial", u"[Esc] Exit Tutorial", u"[Esc] Exit Tutorial"}};
 
+namespace {
+
+std::u16string Wide(const std::string& narrow) {
+    std::u16string out;
+    out.reserve(narrow.size());
+    for (char ch : narrow) out.push_back(char16_t(uint8_t(ch)));
+    return out;
+}
+
+std::string KeyCombo(std::initializer_list<kbm::Binding> bindings) {
+    std::string parts;
+    for (kbm::Binding binding : bindings) {
+        const char* name = kbm::KeyCodeName(kbm::BindingKeyCode(binding));
+        if (!name || !std::strcmp(name, "Unbound")) continue;
+        if (!parts.empty()) parts += '/';
+        parts += name;
+    }
+    if (parts.empty()) parts = "Unbound";
+    return "[" + parts + "]";
+}
+
+std::string Key(kbm::Binding binding) { return KeyCombo({binding}); }
+
+// PC prompts are experimental: they name the key now bound to the pad control the game is asking for. This keeps a
+// rebind visible in the HUD instead of showing the old PC-manual key.
+std::string PromptText(const char* token) {
+    auto is = [token](const char* name) { return std::strcmp(token, name) == 0; };
+    if (is("BUTTON_GRAPHIC_L") || is("BUTTON_TEXT_LEFT_ANALOG"))
+        return KeyCombo({kbm::Binding::MoveUp, kbm::Binding::MoveLeft, kbm::Binding::MoveDown,
+                         kbm::Binding::MoveRight});
+    if (is("BUTTON_GRAPHIC_R") || is("BUTTON_TEXT_RIGHT_ANALOG")) return "[Mouse]";
+    if (is("BUTTON_GRAPHIC_X") || is("BUTTON_TEXT_X") || is("A")) return Key(kbm::Binding::A);
+    if (is("BUTTON_GRAPHIC_CIRCLE") || is("B") || is("BUTTON_GRAPHIC_DECLINE") || is("BUTTON_TEXT_CIRCLE"))
+        return Key(kbm::Binding::B);
+    if (is("BUTTON_GRAPHIC_TRIANGLE") || is("Y")) return Key(kbm::Binding::Y);
+    if (is("BUTTON_GRAPHIC_SQUARE") || is("X") || is("BUTTON_TEXT_SQUARE")) return Key(kbm::Binding::X);
+    if (is("BUTTON_GRAPHIC_R1") || is("BUTTON_TEXT_R1")) return Key(kbm::Binding::RT);
+    if (is("BUTTON_GRAPHIC_R2") || is("BUTTON_TEXT_R2")) return Key(kbm::Binding::RB);
+    if (is("BUTTON_GRAPHIC_L1") || is("BUTTON_TEXT_L1")) return Key(kbm::Binding::LT);
+    if (is("BUTTON_GRAPHIC_L2") || is("BUTTON_TEXT_L2")) return Key(kbm::Binding::LB);
+    if (is("BUTTON_GRAPHIC_L3") || is("BUTTON_TEXT_L3_PRESS")) return Key(kbm::Binding::L3);
+    if (is("BUTTON_GRAPHIC_R3")) return Key(kbm::Binding::R3);
+    if (is("BUTTON_GRAPHIC_DPAD_UP")) return Key(kbm::Binding::DpadUp);
+    if (is("BUTTON_GRAPHIC_DPAD_DOWN")) return Key(kbm::Binding::DpadDown);
+    if (is("BUTTON_GRAPHIC_DPAD_LEFT")) return Key(kbm::Binding::DpadLeft);
+    if (is("BUTTON_GRAPHIC_DPAD_RIGHT") || is("BUTTON_TEXT_RIGHT")) return Key(kbm::Binding::DpadRight);
+    if (is("BUTTON_GRAPHIC_DPAD_VERTICAL")) return KeyCombo({kbm::Binding::DpadUp, kbm::Binding::DpadDown});
+    if (is("BUTTON_GRAPHIC_DPAD_HORIZONTAL")) return KeyCombo({kbm::Binding::DpadLeft, kbm::Binding::DpadRight});
+    if (is("BUTTON_GRAPHIC_SELECT")) return Key(kbm::Binding::Back);
+    if (is("BUTTON_GRAPHIC_START")) return Key(kbm::Binding::Start);
+    if (is("XSTART")) return Key(kbm::Binding::A) + " Start";
+    if (is("XSELECT")) return Key(kbm::Binding::A) + " Select";
+    if (is("XRESTART")) return Key(kbm::Binding::A) + " Restart";
+    if (is("XCONFIRM")) return Key(kbm::Binding::A) + " Confirm";
+    if (is("XPROCEED")) return Key(kbm::Binding::A) + " Proceed";
+    if (is("TBACK")) return Key(kbm::Binding::Y) + " Back";
+    if (is("TCANCEL")) return Key(kbm::Binding::Y) + " Cancel";
+    if (is("TEXIT")) return Key(kbm::Binding::Y) + " Exit";
+    if (is("LOOK_TUTORIAL_START")) return Key(kbm::Binding::Start) + " Options and Profiles";
+    if (is("LOOK_TUTORIAL_EXIT")) return Key(kbm::Binding::B) + " Exit Tutorial";
+    return {};
+}
+
+void SetLabels(KeyPrompt& prompt, const std::string& text) {
+    std::u16string wide = Wide(text);
+    for (uint32_t context = 0; context < kPromptContexts; ++context) {
+        prompt.labels[context] = wide;
+        prompt.va[context] = 0;
+    }
+}
+
+}  // namespace
+
+// Defined just below with the prompt page; declared here so the label refresh can reset the cached page.
+extern uint32_t g_prompt_base;
+extern uint32_t g_prompt_cursor;
+
+void RefreshKeyLabelsImpl() {
+    std::lock_guard<std::mutex> lock(g_label_mutex);
+    for (KeyPrompt& prompt : kKeyPrompts) {
+        if (std::string text = PromptText(prompt.token); !text.empty())
+            SetLabels(prompt, text);
+        else
+            for (uint32_t context = 0; context < kPromptContexts; ++context) prompt.va[context] = 0;
+    }
+    SetLabels(kSprintPrompt, Key(kbm::Binding::A));
+    SetLabels(kAcceptPrompt, Key(kbm::Binding::A));
+    SetLabels(kCancelXPrompt, Key(kbm::Binding::B));
+    SetLabels(kRagePrompt, Key(kbm::Binding::B));
+    SetLabels(kTauntPrompt, Key(kbm::Binding::B));
+    SetLabels(kClosePrompt, Key(kbm::Binding::B));
+    SetLabels(kCancelPrompt, Key(kbm::Binding::B));
+    SetLabels(kPickupPrompt, Key(kbm::Binding::Y));
+    SetLabels(kLookTutorialStartPrompt, Key(kbm::Binding::Start) + " Options and Profiles");
+    SetLabels(kLookTutorialExitPrompt, Key(kbm::Binding::B) + " Exit Tutorial");
+    g_prompt_cursor = g_prompt_base;  // rewrite the same guest page on the next expansion
+}
+
 // The expander sets this before it calls the token dispatcher and restores it afterwards.
 thread_local uint32_t g_source_line = 0;
 
@@ -188,17 +291,16 @@ uint32_t PromptPage() {
 }
 
 bool EnsureLabel(uint8_t* mem_base, KeyPrompt& p, uint32_t context) {
-    const char16_t* label = p.labels[context];
-    if (!label) return false;
+    std::lock_guard<std::mutex> lock(g_label_mutex);
+    const std::u16string& label = p.labels[context];
+    if (label.empty()) return false;
     uint32_t& va = p.va[context];
     if (va) return true;
     if (!PromptPage()) return false;
-    uint32_t units = 0;
-    while (label[units]) ++units;
-    uint32_t bytes = (units + 1) * sizeof(char16_t);
+    uint32_t bytes = uint32_t((label.size() + 1) * sizeof(char16_t));
     uint32_t span = (bytes + 3) & ~3u;
     if (g_prompt_cursor + span > g_prompt_base + kPromptPage) return false;
-    std::memcpy(mem_base + g_prompt_cursor, label, bytes);
+    std::memcpy(mem_base + g_prompt_cursor, label.c_str(), bytes);
     va = g_prompt_cursor;
     g_prompt_cursor += span;
     return true;
@@ -1021,6 +1123,8 @@ void RegisterManagedText(uint32_t object, uint32_t buffer, uint32_t plain, uint3
 }
 
 }  // namespace
+
+void hud_prompts::RefreshKeyLabels() { RefreshKeyLabelsImpl(); }
 
 void ApplyHudDeviceText(bool key_prompts) {
     uint8_t* mem_base = mem::Base();

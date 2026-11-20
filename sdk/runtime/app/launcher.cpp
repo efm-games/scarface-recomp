@@ -282,6 +282,7 @@ void TabDisplay(State& s) { ui::Display(s.settings, false); }
 void TabControls(State& s) {
     (void)s;
     ui::InputOptions();
+    ui::BindingEditor();
     ui::ModernControls();
     ui::ControllerNote();
     ui::KeyBindings();

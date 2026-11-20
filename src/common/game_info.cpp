@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <string>
 #include <toml++/toml.hpp>
 
 #include "common/kbm.h"
@@ -12,6 +13,24 @@ namespace {
 // existing settings file does not silently slow down. The old key is removed on the next save.
 void LoadSettings(const void* table) {
     const toml::table& t = *static_cast<const toml::table*>(table);
+
+    // A file written before keyboard/mouse was opt-in has no kbm key. If it has any other input key, its owner
+    // deliberately used the keyboard layer; keep it on instead of silently switching them to gamepad-only.
+    if (!t.contains("kbm") && (t.contains("kbm_invert_y") || t.contains("kbm_sensitivity") ||
+                               t.contains("kbm_sensitivity_x") || t.contains("kbm_sensitivity_y") ||
+                               t.contains("modern_pad") || t.contains("hud_key_prompts"))) {
+        kbm::enabled = true;
+    }
+
+    if (const toml::table* bindings = t["keybindings"].as_table()) {
+        for (size_t i = 0; i < kbm::BindingCount(); ++i) {
+            std::optional<std::string> name = (*bindings)[kbm::BindingSettingName(i)].value<std::string>();
+            if (!name) continue;
+            uint32_t code = kbm::KeyCodeFromName(name->c_str());
+            if (code) kbm::SetBindingKeyCode(kbm::Binding(i), code);
+        }
+    }
+
     if (t.contains("kbm_sensitivity_x") || t.contains("kbm_sensitivity_y")) return;
     if (std::optional<int64_t> old = t["kbm_sensitivity"].value<int64_t>()) {
         uint32_t both = uint32_t(std::clamp<int64_t>(*old, 10, 300));
@@ -20,7 +39,19 @@ void LoadSettings(const void* table) {
     }
 }
 
-void SaveSettings(void* table) { static_cast<toml::table*>(table)->erase("kbm_sensitivity"); }
+void SaveSettings(void* table) {
+    toml::table& t = *static_cast<toml::table*>(table);
+    t.erase("kbm_sensitivity");
+
+    toml::table bindings;
+    for (size_t i = 0; i < kbm::BindingCount(); ++i) {
+        const char* pad = nullptr;
+        const char* key = nullptr;
+        kbm::DescribeBinding(i, &pad, &key, nullptr);
+        bindings.insert(kbm::BindingSettingName(i), key ? key : "Unbound");
+    }
+    t.insert_or_assign("keybindings", std::move(bindings));
+}
 
 }  // namespace
 
@@ -34,51 +65,39 @@ const app::GameInfo app::kGame = {
     .splash = L"splash",                       // optional splash.png or splash.bmp beside the exe
     .missing = L"Put the game in the assets folder: its disc image (.iso), or default.xbe with its folders beside it.",
     .images = {{"default.xbe", "Scarface"}},  // each recompiled xbe and its exe, for title launches
-    .options = {{"kbm", &kbm::enabled, nullptr, "Keyboard and mouse"},
+    .options = {{"kbm", &kbm::enabled, nullptr, "Keyboard and mouse (opt-in)"},
                 {"kbm_invert_y", &kbm::invert_y, nullptr, "Invert mouse Y"},
                 {"kbm_sensitivity_x", nullptr, &kbm::sensitivity_x, "Mouse sensitivity X", 10, 300},
                 {"kbm_sensitivity_y", nullptr, &kbm::sensitivity_y, "Mouse sensitivity Y", 10, 300},
-                {"modern_pad", &kbm::modern_pad, nullptr, "Modern gamepad controls (GTA-style)"},
-                {"hud_key_prompts", &kbm::hud_prompts, nullptr, "PC key prompts in the HUD"}},
-    // reference only: the bindings live in kbm.cpp, and these rows must stay in step with it
+                {"modern_pad", &kbm::modern_pad, nullptr, "Experimental: Modern gamepad controls (GTA-style)"},
+                {"hud_key_prompts", &kbm::hud_prompts, nullptr, "Experimental: PC key prompts in the HUD"}},
+    // reference only: the editable table lives in kbm.cpp and is shown by ui::BindingEditor()
     .controls =
-        {{"On foot",
-          {{"W A S D", "Move"},
-           {"Mouse", "Look / camera"},
-           {"Space / Left click", "Fire; punch or melee when unarmed"},
-           {"Caps / Right click / Del", "Lock target / strafe"},
-           {"F / Middle click", "Alternative fire / shove"},
-           {"Shift (hold)", "Sprint"},
-           {"Left Ctrl", "Crouch"},
-           {"Enter", "Wall cover"},
-           {"E", "Get into a car / pick up a weapon"},
-           {"R", "Reload"},
-           {"T / X", "Talk / taunt / provoke"},
-           {"V (hold)", "Blind rage"},
-           {"1 / 2", "Select weapon (prev / next)"},
-           {"3", "Equip / conceal weapon"},
-           {"Tab", "SAT phone"},
-           {"Esc", "Pause"},
-           {"C / Home", "Centre the camera"}}},
-         {"In a vehicle",
-          {{"W / P", "Accelerate / forward"},
-           {"S / ; / R", "Brake / reverse"},
-           {"A / D", "Steer"},
-           {"Space / T", "Handbrake / tight turn"},
-           {"Mouse", "Look / camera"},
-           {"Left click / Ctrl / F", "Fire"},
-           {"Caps / Right click / Del", "Lock target"},
-           {"Z / Middle click / PgDn", "Look back"},
-           {"E", "Enter / exit the vehicle"},
-           {"T / X", "Horn"},
-           {"1 / 2 / Mouse wheel", "Cycle weapons"},
-           {"C / PgUp / Home", "Change camera view"},
-           {"Esc", "Pause"}}},
-         {"Menus",
-          {{"Arrow keys / WASD", "Move the selection"},
-           {"Enter", "Select"},
-           {"Esc", "Back out / pause"},
-           {"Mouse wheel", "Change page"}}}},
+        {{"Movement and camera",
+          {{"W A S D", "Left stick: move / steer"},
+           {"Mouse", "Right stick: look / camera"},
+           {"Arrow keys", "D-pad: menus and weapon selection"}}},
+         {"Face buttons and triggers",
+          {{"Space", "A: confirm, sprint, accelerate"},
+           {"T", "B: back, taunt, handbrake"},
+           {"R", "X: reload, brake"},
+           {"E", "Y: interact, enter or exit a vehicle"},
+           {"Caps Lock", "LT: lock on"},
+           {"Left click", "RT: fire"},
+           {"Tab", "LB: SAT phone"},
+           {"F", "RB: alternate fire, look back"}}},
+         {"Other pad controls",
+          {{"Left Ctrl", "L3: crouch"},
+           {"C", "R3: recentre or change camera"},
+           {"Backspace", "Back"},
+           {"Esc", "Start: pause"}}}},
+    .binding_count = kbm::BindingCount,
+    .binding_describe = kbm::DescribeBinding,
+    .binding_capture = kbm::BeginBindingCapture,
+    .binding_capture_active = kbm::BindingCaptureActive,
+    .binding_capture_cancel = kbm::CancelBindingCapture,
+    .binding_reset = kbm::ResetBinding,
+    .binding_reset_all = kbm::ResetAllBindings,
     .load = LoadSettings,                     // migrates the old single sensitivity to both axes
     .save = SaveSettings,                     // drops the old key once it has been migrated
     .init = nullptr,                          // after the settings load, before the window and boot

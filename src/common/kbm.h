@@ -1,8 +1,10 @@
-// Keyboard and mouse as an original Xbox pad, merged with a real controller when one is connected. Defaults copy the
-// PC version's bindings: WASD move/steer, mouse look, Space/LMB fire, F/MMB alt fire, R reload, Shift sprint,
-// Ctrl crouch, Enter wall cover, Caps/RMB lock-on, V rage, T taunt/provoke, E interact, 1/2 weapons, 3 holster,
-// Tab SAT phone, Esc pause, mouse wheel cycle weapons, arrow keys for the pad's d-pad.
+// Keyboard and mouse as an original Xbox pad, merged with a real controller when one is connected. Keyboard and mouse
+// are opt-in: the gamepad is the default. Each bound key sends one fixed Xbox pad control and the game decides what
+// that control means on the current screen. Defaults: WASD left stick, mouse right stick, arrows d-pad, Space A, T B,
+// R X, E Y, Tab/F bumpers, Caps/LMB triggers, Backspace Back, Esc Start, Left Ctrl L3 and C R3. Mouse look always
+// drives the right stick.
 #pragma once
+#include <cstddef>
 #include <cstdint>
 
 namespace input {
@@ -10,6 +12,52 @@ struct Pad;
 }
 
 namespace kbm {
+
+// Fixed Xbox-pad controls the keyboard and mouse can be bound to. Mouse look always drives the right stick, so it is
+// not in the table: binding a key to a pad control keeps the game's own context handling instead of reinterpreting
+// keys for each screen.
+enum class Binding : uint32_t {
+    MoveUp,
+    MoveDown,
+    MoveLeft,
+    MoveRight,
+    DpadUp,
+    DpadDown,
+    DpadLeft,
+    DpadRight,
+    A,
+    B,
+    X,
+    Y,
+    LB,
+    RB,
+    LT,
+    RT,
+    Back,
+    Start,
+    L3,
+    R3,
+    Count
+};
+
+// Key codes are either a Win32 virtual key (1..255) or one of the mouse codes below. 0 means unbound.
+constexpr uint32_t kMouseKeyBase = 0x100;
+constexpr uint32_t kMouseLmb = kMouseKeyBase + 1;
+constexpr uint32_t kMouseRmb = kMouseKeyBase + 2;
+constexpr uint32_t kMouseMmb = kMouseKeyBase + 3;
+
+size_t BindingCount();                                                        // Count, as a size_t
+const char* BindingSettingName(size_t index);                                 // settings.toml key
+void DescribeBinding(size_t index, const char** pad, const char** key, bool* changed);
+void BeginBindingCapture(size_t index);                                       // next key or mouse button is the binding
+bool BindingCaptureActive();
+void CancelBindingCapture();
+void ResetBinding(size_t index);
+void ResetAllBindings();
+uint32_t BindingKeyCode(Binding binding);                                     // for settings persistence
+bool SetBindingKeyCode(Binding binding, uint32_t code);
+uint32_t KeyCodeFromName(const char* name);                                   // 0 for an unknown name
+const char* KeyCodeName(uint32_t code);                                       // stable pointer for the settings UI
 
 // shown in the settings file by app::kGame.options
 extern bool enabled;
