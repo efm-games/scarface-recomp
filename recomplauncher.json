@@ -160,31 +160,31 @@
         },
         {
             "id": "keyboard_mouse",
-            "label": "Keyboard and mouse",
+            "label": "Keyboard and mouse (opt-in)",
             "group": "controls",
-            "help": "Mouse look and the PC manual's key bindings. Leave this on unless you only play with a controller.",
+            "help": "Gamepad is the default. Turn this on for mouse look and fixed keys that each send one Xbox pad control; remap them in the game's Controls tab. Old keyboard settings files keep keyboard enabled.",
             "choices": [
                 { "label": "On", "set": { "kbm": "true" } },
                 { "label": "Off", "set": { "kbm": "false" } }
             ],
-            "defaults": { "kbm": "true" }
+            "defaults": { "kbm": "false" }
         },
         {
             "id": "key_prompts",
-            "label": "HUD key prompts",
+            "label": "Experimental: HUD key prompts",
             "group": "controls",
-            "help": "Shows PC key names instead of controller glyphs while you use the keyboard or mouse.",
+            "help": "Experimental: shows the keys bound to Xbox pad controls instead of controller glyphs. Context-sensitive prompts can still be misleading, so the original glyphs are the default.",
             "choices": [
                 { "label": "On", "set": { "hud_key_prompts": "true" } },
                 { "label": "Off", "set": { "hud_key_prompts": "false" } }
             ],
-            "defaults": { "hud_key_prompts": "true" }
+            "defaults": { "hud_key_prompts": "false" }
         },
         {
             "id": "modern_pad",
-            "label": "Gamepad layout",
+            "label": "Experimental: Gamepad layout (GTA-style)",
             "group": "controls",
-            "help": "GTA-style driving: right trigger accelerates and left trigger brakes. Off uses the original Xbox layout.",
+            "help": "Experimental GTA-style driving on a physical pad: right trigger accelerates and left trigger brakes. Original uses the Xbox layout.",
             "choices": [
                 { "label": "Original", "set": { "modern_pad": "false" } },
                 { "label": "GTA-style", "set": { "modern_pad": "true" } }

@@ -16,7 +16,14 @@ The game's x86 code is statically recompiled ahead of time and the Xbox kernel/X
 
 ## Release
 
-This is the `v1.2.1` release. The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a keyboard and mouse or a gamepad. See [Known issues](#known-issues) for the remaining rough edges.
+This is the `v1.3.0` release. The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a gamepad or with opt-in keyboard and mouse controls. See [Known issues](#known-issues) for the remaining rough edges.
+
+### What's new in v1.3.0
+
+- **Gamepad is now the default.** Keyboard and mouse are opt-in. The Controls tab in the launcher and the F1 overlay now includes a **Keyboard to Xbox pad bindings** screen: each key or mouse button sends one fixed Xbox pad control, the game keeps its own context-sensitive handling, and mouse look always drives the right stick. Bindings are saved in `settings.toml`; older keyboard settings files keep keyboard enabled.
+- **Multi-monitor cursor fix.** The pointer is clipped to the game window while playing, so it cannot leave the window and click another monitor, which previously stopped mouse look. The clip is released for menus, the overlay and minimize.
+- **Experimental options are clearer and off by default.** The GTA-style gamepad preset and PC key prompts are labelled experimental. Key prompts now follow the current bindings instead of a fixed PC-manual table, and the original controller glyphs remain the default.
+- No gameplay, graphics or save-format changes. RecompLauncher support from v1.2.1 remains.
 
 ### What's new in v1.2.1
 
@@ -30,7 +37,7 @@ Earlier work is described in the v1.1.1 release notes (PC/PS2 save conversion an
 
 ## Installation
 
-1. Download `Scarface-v1.2.1-Windows-x64.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
+1. Download `Scarface-v1.3.0-Windows-x64.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
 2. Run `Scarface.exe`.
 3. Click **Browse for the disc image...** and pick your Xbox `.iso`/`.xiso` (a whole-disc dump also works), or **Use an extracted folder...** and pick the folder that holds `default.xbe`. The launcher remembers the path.
 4. Click **Play (A)** or press gamepad **A**. The first start compiles the game's code for your PC once with the bundled recompiler and Clang; it takes a few minutes and about 1 GB of free disk space. Every later start goes straight into the game.
@@ -52,19 +59,27 @@ The Visual C++ runtime is included in the release archive; nothing else needs to
 
 ## Controls
 
-Defaults follow the official PC manual. The keyboard and mouse layer synthesizes the Xbox pad state, so it works with the game's unmodified menus and HUD.
+A gamepad is the default. Xbox, PlayStation and Switch controllers are detected automatically, with hot plugging and rumble. Keyboard and mouse are opt-in: turn on **Keyboard and mouse (opt-in)** in the launcher, the F1 options or `settings.toml`, then use the **Keyboard to Xbox pad bindings** screen in the Controls tab to change keys.
 
-| On foot | Vehicle |
-| --- | --- |
-| WASD move, mouse look | W gas, S brake/reverse, A/D steer |
-| Space / left click fire | Space handbrake |
-| Caps Lock / right click lock-on | Caps Lock / right click lock-on |
-| F / middle click alternate fire | LMB / Ctrl / F fire |
-| Shift sprint, Ctrl crouch, Enter wall cover | Z / middle click look back, C camera |
-| E interact, R reload, T taunt, V rage | E enter/exit, T horn/taunt |
-| 1/2/3 and mouse wheel weapons, Tab SAT, Esc pause | 1/2/3 and mouse wheel weapons, Tab SAT, Esc pause |
+The keyboard layer does not reinterpret keys for each screen. Each key sends one fixed Xbox pad control, and the game decides what that control means in a menu, on foot or in a vehicle. Mouse look always drives the right stick. This is the safest layout because the game keeps its own context-sensitive input handling.
 
-Menus work with the mouse or the arrow keys, Enter (select) and Esc (back). Xbox, PlayStation and Switch controllers are detected automatically and can be used alongside the keyboard and mouse; the active device switches on the fly. See [docs/controls.md](docs/controls.md) for the complete tables.
+| Xbox pad control | Default key | Typical use |
+| --- | --- | --- |
+| Left stick | W/A/S/D | Move / steer |
+| Right stick | Mouse | Look / camera |
+| D-pad | Arrow keys | Weapon selection and menus |
+| A | Space | Confirm, sprint, accelerate |
+| B | T | Back, taunt, handbrake |
+| X | R | Reload, brake |
+| Y | E | Interact, enter or exit a vehicle |
+| LB / RB | Tab / F | SAT phone / alternate fire, look back |
+| LT / RT | Caps Lock / Left click | Lock-on / fire |
+| L3 / R3 | Left Ctrl / C | Crouch / recentre or change camera |
+| Back / Start | Backspace / Esc | Back / pause |
+
+Click a pad control in the binding screen and press a key or mouse button to rebind it; Esc cancels, and each row has a reset. Bindings are saved in `settings.toml` under `[keybindings]`. Existing keyboard settings files keep keyboard enabled and their old sensitivity values.
+
+The GTA-style gamepad preset and PC key prompts are **experimental** and off by default; see [Features](#features). See [docs/controls.md](docs/controls.md) for more detail.
 
 Mouse sensitivity X and Y are separate options, along with Y inversion. The old single `kbm_sensitivity` value is migrated to both axes.
 
@@ -83,14 +98,14 @@ Mouse sensitivity X and Y are separate options, along with Y inversion. The old 
 - DirectSound mixed in software through XAudio2, including Xbox ADPCM.
 
 ### Controller and keyboard/mouse
-- Xbox, PlayStation and Switch controllers through SDL3, with hot plugging and rumble.
-- Keyboard and mouse support following the official PC manual, with automatic on-foot/vehicle bindings.
-- Optional HUD key prompts replace pad glyphs with plain-text key labels while keyboard/mouse is active (or before any input). Line-specific rules follow the PC manual: Start/Load/Accept/Cover are `[Enter]`, dialog `[CLOSE]` and cancel/back/create are `[Esc]`, sprint is `[Shift]`, taunt is `[T]`, rage is `[V]` and pick up/interact is `[E]`. Plain triangle/Y captions get an `[E] ` prefix; the tape-player glyph before `PLAY`/`STOP` is replaced by `[T] `, and the Shuffle caption becomes `[Enter] SHUFFLE ON/OFF` (the original "TURN" wording is kept for gamepad prompts). Outside the music library, the original glyphs return as soon as a controller is used. The music library snapshots the active input when its page opens and keeps that style until you leave.
-- Optional GTA-style gamepad preset (RT accelerate, LT brake), off by default.
+- Gamepad first: Xbox, PlayStation and Switch controllers through SDL3, with hot plugging and rumble.
+- Keyboard and mouse are opt-in. The Controls tab maps each key or mouse button to a fixed Xbox pad control, with a reset for each row and a full reset; mouse look drives the right stick. This avoids the ambiguity of reinterpreting a key for each game context.
+- **Experimental:** HUD key prompts (off by default) replace pad glyphs with the key bound to that pad control. They still depend on the game's context-sensitive prompt text and can occasionally be misleading; touching a controller restores the original glyphs. The music library snapshots the active input when its page opens.
+- **Experimental:** the GTA-style gamepad preset (RT accelerate, LT brake) is off by default and remaps only a physical pad while driving. Original Xbox controls remain the default.
 
 ### Launcher, options and saves
-- Launcher with a disc image picker, an extracted-folder picker, display/input options, the intro-skip toggle and an **Unlock all cheats** option that makes every pause-menu cheat code selectable from a new game (effects are still chosen manually). Gamepad **A** activates the **Play (A)** button just like the ready screen's Start (A) button.
-- In-game options overlay (**F1**) covering display, controls, advanced rendering and game settings.
+- Launcher with a disc image picker, an extracted-folder picker, display/input options, the keyboard-to-Xbox binding screen, the intro-skip toggle and an **Unlock all cheats** option that makes every pause-menu cheat code selectable from a new game (effects are still chosen manually). Gamepad **A** activates the **Play (A)** button just like the ready screen's Start (A) button.
+- In-game options overlay (**F1**) covering display, the same controls and binding screen, advanced rendering and game settings.
 - Save manager that keeps the game's Xbox-format saves in `hdd\E\UDATA\5655003F` beside the executable, imports Xbox save folders, and converts PC or PS2 saves into a free or chosen Xbox profile.
 - Screenshots with **F2**, saved as BMP files in `screenshots` beside the executable.
 - Optional intro skip (off by default), crash dumps and log files.
@@ -102,6 +117,7 @@ Mouse sensitivity X and Y are separate options, along with Y inversion. The old 
 ## Known issues
 
 - Texture pop-in during play.
+- Experimental PC key prompts follow the game's context-sensitive prompt text, so a prompt can still name the wrong action; controller glyphs remain the default.
 - Save import and conversion are new; keep an Xbox profile as the template and back up unusual save folders before importing or converting.
 - Not every Xbox feature has been exercised.
 
