@@ -460,6 +460,8 @@ bool LauncherWanted() {
     return Get().launcher || Get().game.empty();
 }
 
+bool PrepareCommandLine() { return HasArgument(L"--prepare"); }
+
 void LauncherCommandLine() {
     const wchar_t* line = GetCommandLineW();
     const wchar_t* at = std::wcsstr(line, L"--game");

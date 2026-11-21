@@ -288,6 +288,25 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
 
     app::GameFiles game;
     app::LauncherCommandLine();
+    if (app::PrepareCommandLine()) {
+        // RecompLauncher runs this before Play, with no window and no input. Build the code, report progress,
+        // then exit; an ordinary start still loads the result in PrepareGameCode below.
+        if (app::Get().game.empty()) {
+            app::HeadlessMessage("error: --prepare needs --game <path>.\n", true);
+            logx::Flush();
+            return 1;
+        }
+        std::string error;
+        if (!app::LoadGameAt(app::FromUtf8(app::Get().game), game, error)) {
+            std::string text = "error: could not open the game: " + error + "\n";
+            app::HeadlessMessage(text.c_str(), true);
+            logx::Flush();
+            return 1;
+        }
+        int result = app::PrepareHeadless(game) ? 0 : 1;
+        logx::Flush();
+        return result;
+    }
     if (!relaunched && app::LauncherWanted()) {
         if (!app::Launcher(game)) return 0;  // the player closed the launcher
     } else if (!app::FindGame(game)) {

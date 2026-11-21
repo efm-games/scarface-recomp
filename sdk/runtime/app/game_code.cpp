@@ -14,6 +14,8 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <string_view>
 #include <thread>
@@ -767,6 +769,120 @@ bool PrepareGameCode(const GameFiles& game) {
     MessageBoxW(nullptr, L"The game's code could not be loaded, see the log in the logs folder.", kGame.title,
                 MB_ICONERROR);
     return false;
+}
+
+namespace {
+
+std::string NarrowText(std::wstring_view text) {
+    int size = WideCharToMultiByte(CP_UTF8, 0, text.data(), int(text.size()), nullptr, 0, nullptr, nullptr);
+    if (size <= 0) return {};
+    std::string out(size_t(size), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, text.data(), int(text.size()), out.data(), size, nullptr, nullptr);
+    return out;
+}
+
+}  // namespace
+
+void HeadlessMessage(const char* text, bool error) {
+    HANDLE out = GetStdHandle(error ? STD_ERROR_HANDLE : STD_OUTPUT_HANDLE);
+    if (!out || out == INVALID_HANDLE_VALUE) return;
+    DWORD written = 0;
+    WriteFile(out, text, DWORD(std::strlen(text)), &written, nullptr);
+}
+
+bool PrepareHeadless(const GameFiles& game) {
+    // one build at a time, shared with the ordinary first start
+    std::wstring mutex_name = std::wstring(kGame.name) + L"-GameCode";
+    HANDLE handle = CreateMutexW(nullptr, FALSE, mutex_name.c_str());
+    WaitForSingleObject(handle, INFINITE);
+    struct Lock {
+        HANDLE handle;
+        ~Lock() {
+            if (!handle) return;
+            ReleaseMutex(handle);
+            CloseHandle(handle);
+        }
+    } lock{handle};
+
+    std::vector<Image> images = Images();
+    std::vector<Target> stale = StaleTargets(game, images);
+    if (stale.empty()) {
+        HeadlessMessage("progress 1 Game code is already up to date\n");
+        return true;
+    }
+    if (std::wstring blocker = Blocker(stale); !blocker.empty()) {
+        std::string text = "error: " + NarrowText(blocker) + "\n";
+        HeadlessMessage(text.c_str(), true);
+        return false;
+    }
+    for (const Target& target : stale) LOGR("Game code: preparing %ls.dll", target.image->exe.c_str());
+
+    g_progress.stage = Stage::Translating;
+    g_progress.bytes_done = 0;
+    g_progress.bytes_total = 0;
+    g_progress.files_done = 0;
+    g_progress.files_total = 0;
+    g_progress.cancel = false;
+    g_failure.clear();
+    SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED);
+
+    std::atomic<bool> done{false};
+    bool ok = false;
+    std::thread worker([&] {
+        ok = Build(stale);
+        done = true;
+    });
+    std::string last;
+    while (!done.load()) {
+        std::string text;
+        double value = 0.05;
+        switch (g_progress.stage.load()) {
+            case Stage::Translating:
+                text = "Translating the game's code";
+                break;
+            case Stage::Compiling: {
+                uint64_t bytes = g_progress.bytes_done.load();
+                uint64_t total = g_progress.bytes_total.load();
+                value = total ? 0.10 + 0.80 * double(std::min(bytes, total)) / double(total) : 0.10;
+                char files[160];
+                std::snprintf(files, sizeof(files), "Compiling the game's code, file %u of %u",
+                              std::min(g_progress.files_done.load() + 1, g_progress.files_total.load()),
+                              g_progress.files_total.load());
+                text = files;
+                break;
+            }
+            case Stage::Linking:
+                value = 0.95;
+                text = "Linking the game's code";
+                break;
+            case Stage::Ready:
+                value = 1.0;
+                text = "Game code is ready";
+                break;
+        }
+        char line[512];
+        std::snprintf(line, sizeof(line), "progress %.2f %s\n", value, text.c_str());
+        if (line != last) {
+            HeadlessMessage(line);
+            last = line;
+        }
+        Sleep(100);
+    }
+    worker.join();
+    SetThreadExecutionState(ES_CONTINUOUS);
+
+    if (!ok) {
+        std::string reason = g_failure.empty() ? "The game's code could not be built." : NarrowText(g_failure);
+        std::string text = "error: " + reason + "\n";
+        HeadlessMessage(text.c_str(), true);
+        if (std::wstring tail = CompileLogTail(); !tail.empty()) {
+            std::string log = "compile.log:\n" + NarrowText(tail) + "\n";
+            HeadlessMessage(log.c_str(), true);
+        }
+        return false;
+    }
+    HeadlessMessage("progress 1 Game code is ready\n");
+    return true;
 }
 
 }  // namespace app

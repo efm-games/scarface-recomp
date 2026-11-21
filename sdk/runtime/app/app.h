@@ -84,6 +84,10 @@ void LauncherCommandLine();       // --game <path>: this run's game in place of 
 // the recompiled code, <exe>.dll, built from the game in assets when missing or out of date (game_code.cpp) and
 // loaded; false after telling the player why the game cannot start, or when they chose not to start it yet
 bool PrepareGameCode(const GameFiles& game);
+// RecompLauncher's one-time setup: --prepare selects it, and --game <path> supplies the copy.
+bool PrepareCommandLine();
+bool PrepareHeadless(const GameFiles& game);  // no window or dialogs; prints progress lines to stdout
+void HeadlessMessage(const char* text, bool error = false);
 int Instance();  // --instance N on the command line, 0 without: a second copy on this PC for system link tests
 void* Window();  // HWND
 // boot splash: GameInfo::splash .bmp or .png beside the exe, up before the game window
