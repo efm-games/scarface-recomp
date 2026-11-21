@@ -16,7 +16,14 @@ The game's x86 code is statically recompiled ahead of time and the Xbox kernel/X
 
 ## Release
 
-This is the `v1.3.0` release. The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a gamepad or with opt-in keyboard and mouse controls. See [Known issues](#known-issues) for the remaining rough edges.
+This is the `v1.3.1` release. The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a gamepad or with opt-in keyboard and mouse controls. See [Known issues](#known-issues) for the remaining rough edges.
+
+### What's new in v1.3.1
+
+- **Save manager overhaul.** One four-row table shows all four in-game profiles, with **Import From File** and **Import From Folder** on empty rows. Source detection is automatic for Xbox folders, raw PC/PS2 saves, CodeBreaker `.cbs`, Max Drive `.max`, SharkPort/X-Port `.sps`/`.xps`, EMS `.psu` and virtual-memory-card `.zip` archives. Imports target an explicit profile and no prepared Xbox profile is needed.
+- **PS2 conversion is more complete.** The fourth profile id is supported, and the 332-variable CodeBreaker save that crashed after "Profile loads successfully" now imports and loads correctly.
+- **Safer in-game options.** The Saves tab remains in the F1 overlay, but shows a warning and disables import, open and delete while the game is running. The pre-game launcher can still manage saves.
+- Command-line import now requires an explicit `--save-slot 1|2|3|4`, and occupied profiles are rejected.
 
 ### What's new in v1.3.0
 
@@ -37,7 +44,7 @@ Earlier work is described in the v1.1.1 release notes (PC/PS2 save conversion an
 
 ## Installation
 
-1. Download `Scarface-v1.3.0-Windows-x64.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
+1. Download `Scarface-v1.3.1-Windows-x64.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
 2. Run `Scarface.exe`.
 3. Click **Browse for the disc image...** and pick your Xbox `.iso`/`.xiso` (a whole-disc dump also works), or **Use an extracted folder...** and pick the folder that holds `default.xbe`. The launcher remembers the path.
 4. Click **Play (A)** or press gamepad **A**. The first start compiles the game's code for your PC once with the bundled recompiler and Clang; it takes a few minutes and about 1 GB of free disk space. Every later start goes straight into the game.
@@ -106,7 +113,7 @@ Mouse sensitivity X and Y are separate options, along with Y inversion. The old 
 ### Launcher, options and saves
 - Launcher with a disc image picker, an extracted-folder picker, display/input options, the keyboard-to-Xbox binding screen, the intro-skip toggle and an **Unlock all cheats** option that makes every pause-menu cheat code selectable from a new game (effects are still chosen manually). Gamepad **A** activates the **Play (A)** button just like the ready screen's Start (A) button.
 - In-game options overlay (**F1**) covering display, the same controls and binding screen, advanced rendering and game settings.
-- Save manager that keeps the game's Xbox-format saves in `hdd\E\UDATA\5655003F` beside the executable, imports Xbox save folders, and converts PC or PS2 saves into a free or chosen Xbox profile.
+- Save manager that keeps the game's Xbox-format saves in `hdd\E\UDATA\5655003F` beside the executable. One four-row table shows all in-game profiles: empty rows offer **Import From File** and **Import From Folder**, while occupied rows offer open and delete. The source type is auto-detected: original Xbox folders, raw PC/PS2 saves, CodeBreaker `.cbs`, Max Drive `.max`, SharkPort/X-Port `.sps`/`.xps`, EMS `.psu`, and virtual-memory-card `.zip` archives. Xbox saves are rebound and re-signed to the chosen profile; PC or PS2 saves are converted into it without needing an existing Xbox profile. All four rows use the game's own save slots, including the fourth id confirmed from a game-created save. There is no first-free-profile fallback. Save-manager commands are disabled in the in-game overlay; the pre-game launcher can manage saves.
 - Screenshots with **F2**, saved as BMP files in `screenshots` beside the executable.
 - Optional intro skip (off by default), crash dumps and log files.
 - Frame and state captures with **F2**/**F3** and the debug variables in [docs/debugging.md](docs/debugging.md).
@@ -118,7 +125,7 @@ Mouse sensitivity X and Y are separate options, along with Y inversion. The old 
 
 - Texture pop-in during play.
 - Experimental PC key prompts follow the game's context-sensitive prompt text, so a prompt can still name the wrong action; controller glyphs remain the default.
-- Save import and conversion are new; keep an Xbox profile as the template and back up unusual save folders before importing or converting.
+- Save import and conversion are new; back up unusual save folders before importing or converting.
 - Not every Xbox feature has been exercised.
 
 ## Building
