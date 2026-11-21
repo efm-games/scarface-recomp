@@ -1,6 +1,6 @@
 # Project notes
 
-Background notes that are not a work queue. `v1.3.1` is the current release. With the graphics defect below resolved,
+Background notes that are not a work queue. `v1.3.2` is the current release. With the graphics defect below resolved,
 further work is limited to bug fixes and the explicitly approved input changes recorded here.
 
 ## First-mission lighting/texture flash

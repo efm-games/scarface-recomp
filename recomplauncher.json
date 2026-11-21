@@ -6,11 +6,22 @@
     "game": {
         "kind": "iso_or_folder",
         "label": "Your own Xbox copy of Scarface: The World Is Yours: a disc image (.iso/.xiso), or an extracted folder holding default.xbe.",
-        "check": { "file": "default.xbe", "iso9660": "default.xbe" }
+        "check": { "file": "default.xbe", "xdvdfs": "default.xbe" },
+        "dumps": [
+            { "name": "USA/Europe full DVD", "size": 7825162240, "crc32": "1e4c0208" }
+        ]
     },
     "start": {
         "program": ["Scarface.exe"],
         "args": ["--game", "{game}", "--no-launcher"]
+    },
+    "prepare": {
+        "program": ["Scarface.exe"],
+        "args": ["--prepare", "--game", "{game}"],
+        "label": "Building the game's code",
+        "timeout": 5400,
+        "version": "1.3.2",
+        "done": ["{install}/Scarface.dll"]
     },
     "config": [
         {

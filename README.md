@@ -16,7 +16,14 @@ The game's x86 code is statically recompiled ahead of time and the Xbox kernel/X
 
 ## Release
 
-This is the `v1.3.1` release. The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a gamepad or with opt-in keyboard and mouse controls. See [Known issues](#known-issues) for the remaining rough edges.
+This is the `v1.3.2` release. The game boots from your own Xbox disc image, reaches the menus and is playable start to finish with a gamepad or with opt-in keyboard and mouse controls. See [Known issues](#known-issues) for the remaining rough edges.
+
+### What's new in v1.3.2
+
+- **RecompLauncher setup step.** A windowless `--prepare` mode builds the game's code during setup, with progress lines, a nonzero exit on failure and a `Scarface.dll` completion marker. Starting without the launcher still works exactly as before.
+- **Correct Xbox image detection.** The RecompLauncher manifest now checks for `default.xbe` in XDVDFS images instead of ISO-9660, so a trimmed Xbox `.xiso` game partition is accepted without extracting it. Extracted folders remain supported.
+- **Known-good dump metadata.** The manifest lists the Redump USA/Europe full-DVD entry for the verified-dump check. A trimmed game-partition image will not match that full-disc hash.
+- No gameplay, graphics or save-format changes from v1.3.1.
 
 ### What's new in v1.3.1
 
@@ -44,12 +51,12 @@ Earlier work is described in the v1.1.1 release notes (PC/PS2 save conversion an
 
 ## Installation
 
-1. Download `Scarface-v1.3.1-Windows-x64.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
+1. Download `Scarface-v1.3.2-Windows-x64.zip` from the [Releases](https://github.com/efm-games/scarface-recomp/releases) page and extract it anywhere. The archive contains no game data.
 2. Run `Scarface.exe`.
 3. Click **Browse for the disc image...** and pick your Xbox `.iso`/`.xiso` (a whole-disc dump also works), or **Use an extracted folder...** and pick the folder that holds `default.xbe`. The launcher remembers the path.
 4. Click **Play (A)** or press gamepad **A**. The first start compiles the game's code for your PC once with the bundled recompiler and Clang; it takes a few minutes and about 1 GB of free disk space. Every later start goes straight into the game.
 
-With [RecompLauncher](https://recomplauncher.com/game/scarface-recomp), the setup screen handles the copy selection and first start: add your disc image or folder on the game's page and press Play. Settings are available there too.
+With [RecompLauncher](https://recomplauncher.com/game/scarface-recomp), the setup screen handles the copy selection and builds the game's code without a window: add your disc image or folder on the game's page, let setup finish, then press Play. Settings are available there too.
 
 The executable checks the game's `default.xbe` SHA-1 (`9367786d1b3bc9b35208a29a7ddca29487af0f5d`). If your image is a different release, the launcher warns you and lets you try it anyway.
 
