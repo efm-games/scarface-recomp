@@ -163,12 +163,12 @@ void ToggleOverlay();  // any thread; the window thread's F1 calls this
 
 namespace saves {
 
-// the Saves tab (saves.cpp): list E:\UDATA\<title id>, import an Xbox save or convert a PC/PS2 save, delete, open
-void Ui();
-// --import-save <folder|save file> [--save-slot 1|2|3] before the launcher; folders of Xbox saves are copied,
-// PC/PS2 saves are converted. --save-slot applies only to conversion (0 or omitted picks the first free profile).
+// the Saves tab (saves.cpp): list E:\UDATA\<title id>, import an Xbox save or convert a PC/PS2 save, delete, open.
+// game_running disables every command: the pre-game launcher may manage saves, the in-game overlay may not.
+void Ui(bool game_running);
+// --import-save <folder|save file> --save-slot 1|2|3|4 before the launcher; the target is required. Xbox saves are
+// rebound to that profile and PC/PS2 saves are converted into it. Occupied profiles are rejected.
 bool CommandLine();
-bool ImportFromFolder(const std::string& path, std::string& status);
 
 }  // namespace saves
 

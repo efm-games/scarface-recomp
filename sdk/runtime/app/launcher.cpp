@@ -332,7 +332,7 @@ void Draw(State& s) {
             ImGui::EndTabItem();
         }
         if (kGame.title_id && *kGame.title_id && ImGui::BeginTabItem("Saves")) {
-            saves::Ui();
+            saves::Ui(false);
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Advanced")) {

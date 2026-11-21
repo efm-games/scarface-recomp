@@ -130,7 +130,7 @@ void Overlay(double fps) {
             ImGui::EndTabItem();
         }
         if (kGame.title_id && *kGame.title_id && ImGui::BeginTabItem("Saves")) {
-            saves::Ui();
+            saves::Ui(true);
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Game")) {

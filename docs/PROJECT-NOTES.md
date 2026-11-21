@@ -1,6 +1,6 @@
 # Project notes
 
-Background notes that are not a work queue. `v1.3.0` is the current release. With the graphics defect below resolved,
+Background notes that are not a work queue. `v1.3.1` is the current release. With the graphics defect below resolved,
 further work is limited to bug fixes and the explicitly approved input changes recorded here.
 
 ## First-mission lighting/texture flash
@@ -58,3 +58,31 @@ require renderer changes this project does not intend to make, including engine 
 exposure/HDR data, semantic and engine masks, NVIDIA runtime packaging, and hardware gating. External user-installed
 overlay solutions are outside this project: they are not bundled, supported, or required, and the base renderer keeps
 working without an NVIDIA card or extra redistributables.
+
+## Save import and conversion
+
+PC saves use the same named-variable format as Xbox saves, but some releases have 191 variables instead of the
+originally handled 188; PS2 releases have 169, 170, 174 or 332. The converter maps values by name into the Xbox save layout:
+it uses a game-created profile when one exists and otherwise builds a template from the source, so the extra variables
+are ignored and no Xbox profile has to exist first. CodeBreaker `.cbs` saves are RC4-decrypted and inflated in memory;
+Max Drive `.max` uses LZARI, SharkPort/X-Port `.sps`/`.xps` stores raw members, EMS/uLaunchELF `.psu` stores a small
+PS2 directory, and GameFAQs' `.zip` archives hold a PSV virtual-memory-card image. All are decoded in memory before
+conversion, leaving the downloaded file untouched. A 332-variable CodeBreaker save used to crash after
+"Profile loads successfully": PS2 value banks insert four-byte gaps before variables 5 and 196, and synthesized
+Xbox templates are capped to 191 variables so late values cannot overwrite the signature areas. The save header's
+four bytes at `0x0F` are the in-game profile identity, not part of
+the date or the variable table. The game compares them with the fixed profile folder id, so an identity copied from
+another profile makes the save look damaged. Original-Xbox imports are therefore rebound to the selected slot: the
+identity is replaced, the three HMAC-SHA1 signature blocks are recomputed with the game's zero key, and the label is
+rewritten. The save manager shows all four in-game profiles in one table: every row is always visible, empty rows offer
+separate **Import From File** and **Import From Folder** buttons (Windows uses different dialogs for the two), and
+occupied rows offer open and delete. Source detection is automatic. Profiles 1-3 use the
+game's fixed folder ids and identities. Profile 4 was confirmed from the save the game created in the empty fourth slot:
+folder `267AFF5B38C3`, identity `15 11 1a 30`, `SaveMeta.xbx` `Name=Profile  4`, and three valid signatures. The launcher
+keeps that identity in private metadata and prefers the live save's identity if the game rewrites it, so the row still
+imports after the save is deleted. Every row, including Profile 4, offers import while empty. There is no first-free
+fallback, and the import/convert code rejects an occupied target, so the player must delete the existing save first.
+`User_Slot_0`/Profile 1 is only written when the player explicitly targets that empty slot. The launcher and the in-game
+options overlay share the save-manager tab, but they are different modes. The pre-game launcher passes `game_running =
+false` and can manage saves; the F1 overlay passes `true`, shows a warning and disables every command (import, open
+folder and delete) because the game is already running behind it. Command-line import remains a pre-game operation.
